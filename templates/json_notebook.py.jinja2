@@ -1,0 +1,9 @@
+{% extends "_base_notebook.py.jinja2" %}
+{% block read_source %}
+df = (
+    spark.read
+    .option("multiLine", "{{ multiline }}")
+    .schema(schema)
+    .json(source_path)
+)
+{% endblock %}

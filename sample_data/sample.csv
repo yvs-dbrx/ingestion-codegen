@@ -1,0 +1,5 @@
+customer_id,first_name,last_name,email,signup_date,lifetime_value,is_active
+1001,Jane,Doe,jane.doe@example.com,2024-03-14,4820.50,true
+1002,Marcus,Lee,marcus.lee@example.com,2024-05-02,1290.00,true
+1003,Priya,Nair,priya.nair@example.com,2023-11-19,8630.75,false
+1004,Tom,Becker,tom.becker@example.com,2025-01-08,340.00,true

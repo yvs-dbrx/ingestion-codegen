@@ -1,0 +1,35 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ## Schema probe (auto-generated, one-time run)
+# MAGIC Reads a sample of `{{ source_path }}` using plain pandas. Unity
+# MAGIC Catalog Volumes are FUSE-mounted on cluster nodes, so this is an
+# MAGIC ordinary local file read from the cluster's point of view — not a
+# MAGIC special remote-read mechanism. Exits with the discovered schema as
+# MAGIC JSON for the calling script to pick up. Safe to delete after use;
+# MAGIC the calling script does this automatically.
+
+# COMMAND ----------
+
+import pandas as pd
+import json
+
+dbutils.widgets.text("source_path", "{{ source_path }}")
+source_path = dbutils.widgets.get("source_path")
+sample_rows = {{ sample_rows }}
+
+# COMMAND ----------
+
+{% block read_sample %}{% endblock %}
+
+# COMMAND ----------
+
+columns = []
+for name, dtype in df.dtypes.items():
+    nullable = bool(df[name].isnull().any())
+    columns.append({
+        "name": str(name).replace(".", "_").replace(" ", "_"),
+        "pandas_dtype": str(dtype),
+        "nullable": nullable,
+    })
+
+dbutils.notebook.exit(json.dumps(columns))
