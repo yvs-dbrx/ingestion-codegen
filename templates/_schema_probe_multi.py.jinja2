@@ -1,0 +1,70 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ## Multi-file schema probe (auto-generated, one-time run)
+# MAGIC Lists files matching `{{ glob_pattern }}` under `{{ source_folder }}`
+# MAGIC and reads a sample of each using plain pandas — the folder listing
+# MAGIC AND every per-file sample read happen here, on the cluster, in one
+# MAGIC job run, so the control plane never touches the client's Volume/S3
+# MAGIC folder directly, not even just to list filenames. Unity Catalog
+# MAGIC Volumes are FUSE-mounted on cluster nodes, so this is an ordinary
+# MAGIC local directory listing + file read from the cluster's point of
+# MAGIC view — not a special remote-read mechanism. Exits with a JSON list
+# MAGIC of {file_name, table, columns} for the calling script to pick up.
+# MAGIC Safe to delete after use; the calling script does this
+# MAGIC automatically.
+
+# COMMAND ----------
+
+import glob
+import json
+import os
+import re
+
+import pandas as pd
+
+dbutils.widgets.text("source_folder", "{{ source_folder }}")
+source_folder = dbutils.widgets.get("source_folder").rstrip("/")
+sample_rows = {{ sample_rows }}
+
+# COMMAND ----------
+
+def sanitize_table_name(name):
+    name = re.sub(r"[^0-9a-zA-Z_]", "_", name.strip().lower()).strip("_")
+    if not name:
+        return "table"
+    if name[0].isdigit():
+        name = f"t_{name}"
+    return name
+
+
+def read_one_sample(source_path, sample_rows):
+{% block read_sample %}
+    pass
+{% endblock %}
+    return df
+
+# COMMAND ----------
+
+file_paths = sorted(glob.glob(os.path.join(source_folder, "{{ glob_pattern }}")))
+if not file_paths:
+    dbutils.notebook.exit(json.dumps({"error": f"No {{ glob_pattern }} files found in {source_folder}"}))
+
+results = []
+for source_path in file_paths:
+    df = read_one_sample(source_path, sample_rows)
+    columns = []
+    for name, dtype in df.dtypes.items():
+        nullable = bool(df[name].isnull().any())
+        columns.append({
+            "name": str(name).replace(".", "_").replace(" ", "_"),
+            "pandas_dtype": str(dtype),
+            "nullable": nullable,
+        })
+    file_name = os.path.basename(source_path)
+    results.append({
+        "file_name": file_name,
+        "table": sanitize_table_name(os.path.splitext(file_name)[0]),
+        "columns": columns,
+    })
+
+dbutils.notebook.exit(json.dumps(results))

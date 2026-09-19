@@ -1,0 +1,9 @@
+{% extends "_schema_probe_multi.py.jinja2" %}
+{% block read_sample %}
+    df = pd.read_csv(
+        source_path,
+        delimiter="{{ delimiter }}",
+        header={{ "0" if has_header else "None" }},
+        nrows=sample_rows,
+    )
+{% endblock %}

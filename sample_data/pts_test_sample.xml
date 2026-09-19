@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pts4255 xmlns="http://www.pts.org/efile" documentId="RET-0001">
+  <RecaptureOfInvstCrProperties>
+    <PropertyDesc>Rehabilitation - Historic Office Building</PropertyDesc>
+    <CreditRt>0.1000</CreditRt>
+    <CreditBasePYAmt>50000.00</CreditBasePYAmt>
+    <NonqualifiedFinanceNetChgAmt>5000.00</NonqualifiedFinanceNetChgAmt>
+    <CreditBaseCYAmt>45000.00</CreditBaseCYAmt>
+    <RefiguredCreditAmt>4500.00</RefiguredCreditAmt>
+    <PriorYearsGeneralBusinessCrAmt>4000.00</PriorYearsGeneralBusinessCrAmt>
+    <AtRiskCreditRecaptureAmt>500.00</AtRiskCreditRecaptureAmt>
+    <UnusedGeneralBusCrOrigCrAmt>5000.00</UnusedGeneralBusCrOrigCrAmt>
+    <NonqualifedFinanceRcptrTaxAmt>500.00</NonqualifedFinanceRcptrTaxAmt>
+    <PlacedInServiceDt>2019-06-15</PlacedInServiceDt>
+    <PropertyCeasedToQualifyDt>2023-09-01</PropertyCeasedToQualifyDt>
+    <PropertyQualifiedYearCnt>4</PropertyQualifiedYearCnt>
+    <UnusedGeneralBusCrNoCrAmt>4500.00</UnusedGeneralBusCrNoCrAmt>
+    <AggregateCreditDecreaseAmt>500.00</AggregateCreditDecreaseAmt>
+    <RecapturePct>0.2000</RecapturePct>
+    <InvestmentCrRecaptureTaxAmt>900.00</InvestmentCrRecaptureTaxAmt>
+  </RecaptureOfInvstCrProperties>
+  <RecaptureOfInvstCrProperties>
+    <PropertyDesc>Energy - Solar Water Heating Property</PropertyDesc>
+    <CreditRt>0.3000</CreditRt>
+    <CreditBasePYAmt>120000.00</CreditBasePYAmt>
+    <NonqualifiedFinanceNetChgAmt>12000.00</NonqualifiedFinanceNetChgAmt>
+    <CreditBaseCYAmt>108000.00</CreditBaseCYAmt>
+    <RefiguredCreditAmt>32400.00</RefiguredCreditAmt>
+    <PriorYearsGeneralBusinessCrAmt>36000.00</PriorYearsGeneralBusinessCrAmt>
+    <AtRiskCreditRecaptureAmt>3600.00</AtRiskCreditRecaptureAmt>
+    <UnusedGeneralBusCrOrigCrAmt>36000.00</UnusedGeneralBusCrOrigCrAmt>
+    <NonqualifedFinanceRcptrTaxAmt>3600.00</NonqualifedFinanceRcptrTaxAmt>
+    <PlacedInServiceDt>2020-03-10</PlacedInServiceDt>
+    <PropertyCeasedToQualifyDt>2023-12-20</PropertyCeasedToQualifyDt>
+    <PropertyQualifiedYearCnt>3</PropertyQualifiedYearCnt>
+    <UnusedGeneralBusCrNoCrAmt>32400.00</UnusedGeneralBusCrNoCrAmt>
+    <AggregateCreditDecreaseAmt>3600.00</AggregateCreditDecreaseAmt>
+    <RecapturePct>0.4000</RecapturePct>
+    <InvestmentCrRecaptureTaxAmt>1440.00</InvestmentCrRecaptureTaxAmt>
+  </RecaptureOfInvstCrProperties>
+  <RecaptureOfInvstCrProperties>
+    <PropertyDesc>Reforestation - Timber Property</PropertyDesc>
+    <CreditRt>0.0900</CreditRt>
+    <CreditBasePYAmt>8000.00</CreditBasePYAmt>
+    <NonqualifiedFinanceNetChgAmt>0.00</NonqualifiedFinanceNetChgAmt>
+    <CreditBaseCYAmt>8000.00</CreditBaseCYAmt>
+    <RefiguredCreditAmt>720.00</RefiguredCreditAmt>
+    <PriorYearsGeneralBusinessCrAmt>720.00</PriorYearsGeneralBusinessCrAmt>
+    <AtRiskCreditRecaptureAmt>0.00</AtRiskCreditRecaptureAmt>
+    <UnusedGeneralBusCrOrigCrAmt>720.00</UnusedGeneralBusCrOrigCrAmt>
+    <NonqualifedFinanceRcptrTaxAmt>0.00</NonqualifedFinanceRcptrTaxAmt>
+    <PlacedInServiceDt>2021-01-05</PlacedInServiceDt>
+    <PropertyCeasedToQualifyDt>2023-06-30</PropertyCeasedToQualifyDt>
+    <PropertyQualifiedYearCnt>2</PropertyQualifiedYearCnt>
+    <UnusedGeneralBusCrNoCrAmt>720.00</UnusedGeneralBusCrNoCrAmt>
+    <AggregateCreditDecreaseAmt>0.00</AggregateCreditDecreaseAmt>
+    <RecapturePct>0.6667</RecapturePct>
+    <InvestmentCrRecaptureTaxAmt>480.00</InvestmentCrRecaptureTaxAmt>
+  </RecaptureOfInvstCrProperties>
+  <RecaptureOfInvstCrProperties>
+    <!-- PropertyDesc and a few other optional fields deliberately omitted here (minOccurs="0" in the XSD) to exercise nullability -->
+    <CreditRt>0.1000</CreditRt>
+    <CreditBasePYAmt>25000.00</CreditBasePYAmt>
+    <CreditBaseCYAmt>25000.00</CreditBaseCYAmt>
+    <RefiguredCreditAmt>2500.00</RefiguredCreditAmt>
+    <PriorYearsGeneralBusinessCrAmt>2500.00</PriorYearsGeneralBusinessCrAmt>
+    <AtRiskCreditRecaptureAmt>0.00</AtRiskCreditRecaptureAmt>
+    <UnusedGeneralBusCrOrigCrAmt>2500.00</UnusedGeneralBusCrOrigCrAmt>
+    <PlacedInServiceDt>2018-11-22</PlacedInServiceDt>
+    <PropertyCeasedToQualifyDt>2023-03-15</PropertyCeasedToQualifyDt>
+    <PropertyQualifiedYearCnt>5</PropertyQualifiedYearCnt>
+    <UnusedGeneralBusCrNoCrAmt>2500.00</UnusedGeneralBusCrNoCrAmt>
+    <AggregateCreditDecreaseAmt>0.00</AggregateCreditDecreaseAmt>
+    <RecapturePct>0.0000</RecapturePct>
+    <InvestmentCrRecaptureTaxAmt>0.00</InvestmentCrRecaptureTaxAmt>
+  </RecaptureOfInvstCrProperties>
+  <RecaptureOfInvstCrProperties>
+    <PropertyDesc>Energy - Wind Property</PropertyDesc>
+    <CreditRt>0.3000</CreditRt>
+    <CreditBasePYAmt>200000.00</CreditBasePYAmt>
+    <NonqualifiedFinanceNetChgAmt>20000.00</NonqualifiedFinanceNetChgAmt>
+    <CreditBaseCYAmt>180000.00</CreditBaseCYAmt>
+    <RefiguredCreditAmt>54000.00</RefiguredCreditAmt>
+    <PriorYearsGeneralBusinessCrAmt>60000.00</PriorYearsGeneralBusinessCrAmt>
+    <AtRiskCreditRecaptureAmt>6000.00</AtRiskCreditRecaptureAmt>
+    <UnusedGeneralBusCrOrigCrAmt>60000.00</UnusedGeneralBusCrOrigCrAmt>
+    <NonqualifedFinanceRcptrTaxAmt>6000.00</NonqualifedFinanceRcptrTaxAmt>
+    <PlacedInServiceDt>2017-08-08</PlacedInServiceDt>
+    <PropertyCeasedToQualifyDt>2023-02-14</PropertyCeasedToQualifyDt>
+    <PropertyQualifiedYearCnt>6</PropertyQualifiedYearCnt>
+    <UnusedGeneralBusCrNoCrAmt>54000.00</UnusedGeneralBusCrNoCrAmt>
+    <AggregateCreditDecreaseAmt>6000.00</AggregateCreditDecreaseAmt>
+    <RecapturePct>1.0000</RecapturePct>
+    <InvestmentCrRecaptureTaxAmt>5400.00</InvestmentCrRecaptureTaxAmt>
+  </RecaptureOfInvstCrProperties>
+</pts4255>

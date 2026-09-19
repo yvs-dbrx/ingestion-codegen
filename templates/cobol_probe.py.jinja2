@@ -1,0 +1,105 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ## COBOL schema probe (auto-generated, one-time run)
+# MAGIC Reads the schema Cobrix derives from the copybook at
+# MAGIC `{{ copybook_path }}`, applied against the sample data file at
+# MAGIC `{{ data_path }}`. Requires the Cobrix library already attached to
+# MAGIC the cluster this runs on, with the Scala suffix matching this
+# MAGIC cluster's Spark version: za.co.absa.cobrix:spark-cobol_2.12:2.11.0
+# MAGIC for Spark 3.x / DBR <=16.x, za.co.absa.cobrix:spark-cobol_2.13:2.11.0
+# MAGIC for Spark 4.0+ / DBR 17.x+ — a mismatch fails this probe with a
+# MAGIC generic internal error, not a clear one. See README for setup; this
+# MAGIC is why this probe needs an existing cluster rather than defaulting
+# MAGIC to serverless like the other probes in this project. Exits with the
+# MAGIC discovered schema as JSON. Safe to delete after use; the calling
+# MAGIC script does this automatically.
+
+# COMMAND ----------
+
+import json
+
+from pyspark.sql.types import DecimalType
+
+dbutils.widgets.text("copybook_path", "{{ copybook_path }}")
+dbutils.widgets.text("data_path", "{{ data_path }}")
+copybook_path = dbutils.widgets.get("copybook_path")
+data_path = dbutils.widgets.get("data_path")
+
+# COMMAND ----------
+
+# Cobrix derives the schema from the copybook alone — the data file is
+# only needed because Spark's DataFrameReader.load() requires a path to
+# resolve against; no data rows are scanned to determine the schema.
+df = (
+    spark.read.format("cobol")
+    .option("copybook", copybook_path)
+    {% if is_record_sequence %}.option("is_record_sequence", "true"){% endif %}
+    {% if is_text %}.option("is_text", "true"){% endif %}
+    .load(data_path)
+)
+
+# COMMAND ----------
+
+from pyspark.sql.types import StructType
+
+# DDL type strings computed here (not just the Spark type class name) so
+# DecimalType keeps its precision/scale — COMP-3 packed-decimal fields
+# are the most common COBOL numeric type, and "DOUBLE" would silently
+# lose precision that matters for financial data.
+SQL_TYPE_MAP = {
+    "StringType": "STRING",
+    "IntegerType": "INT",
+    "LongType": "BIGINT",
+    "ShortType": "SMALLINT",
+    "ByteType": "TINYINT",
+    "DoubleType": "DOUBLE",
+    "FloatType": "FLOAT",
+    "BooleanType": "BOOLEAN",
+    "DateType": "DATE",
+    "TimestampType": "TIMESTAMP",
+    "BinaryType": "BINARY",
+}
+
+
+def flatten(schema, path=None):
+    """
+    COBOL group items (level 05 with child level-10s, e.g. CUST-NAME made
+    up of FIRST-NAME/LAST-NAME) come back from Cobrix as nested StructType
+    columns, not flat scalars — recurse into every struct so the reported
+    schema (and later, the notebook's own flattening .select()) matches
+    what a Delta table's flat STRING/BIGINT/etc. columns actually need.
+    OCCURS (array) fields are NOT flattened here — same "fall back to
+    STRING with a warning" treatment as any other unhandled complex type,
+    a real gap to close later, not silently mishandled.
+    """
+    path = path or []
+    leaves = []
+    for field in schema.fields:
+        field_path = path + [field.name]
+        if isinstance(field.dataType, StructType):
+            leaves.extend(flatten(field.dataType, field_path))
+        else:
+            leaves.append((field_path, field.dataType, field.nullable))
+    return leaves
+
+
+columns = []
+for field_path, data_type, nullable in flatten(df.schema):
+    type_name = type(data_type).__name__
+    if isinstance(data_type, DecimalType):
+        sql_type = f"DECIMAL({data_type.precision},{data_type.scale})"
+    elif type_name not in SQL_TYPE_MAP:
+        print(f"  [warning] unhandled type '{type_name}' for {'.'.join(field_path)} — mapping to STRING.")
+        sql_type = "STRING"
+    else:
+        sql_type = SQL_TYPE_MAP[type_name]
+    flat_name = "_".join(p.replace("-", "_") for p in field_path)
+    columns.append({
+        "name": flat_name,
+        "path": field_path,
+        "spark_type": type_name,
+        "sql_type": sql_type,
+        "nullable": nullable,
+    })
+
+dbutils.notebook.exit(json.dumps(columns))

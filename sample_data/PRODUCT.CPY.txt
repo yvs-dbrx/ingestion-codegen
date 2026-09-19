@@ -1,0 +1,65 @@
+      *================================================================*
+      * COPYBOOK : PRODUCT.CPY                                         *
+      * PURPOSE  : Product Master Record with Category Hierarchy       *
+      * RECLEN   : 250 Characters (Fixed-Length)                       *
+      *                                                                 *
+      * FIELD MAP:                                                      *
+      *   POS  001-008  PROD-ID             9(8)     Product ID        *
+      *   POS  009-048  PROD-NAME           X(40)    Product Name      *
+      *   POS  049-108  PROD-DESCRIPTION    X(60)    Description       *
+      *   POS  109-112  PROD-CAT-CODE       X(4)     Category Code     *
+      *   POS  113-137  PROD-CAT-DESC       X(25)    Category Desc     *
+      *   POS  138-143  PROD-SUBCAT-CODE    X(6)     Sub-Category Code *
+      *   POS  144-168  PROD-SUBCAT-DESC    X(25)    Sub-Category Desc *
+      *   POS  169-177  PROD-UNIT-PRICE     9(7)V99  Unit Price        *
+      *   POS  178-186  PROD-UNIT-COST      9(7)V99  Unit Cost         *
+      *   POS  187-192  PROD-QTY-ON-HAND    9(6)     Qty On Hand       *
+      *   POS  193-198  PROD-REORDER-LVL    9(6)     Reorder Level     *
+      *   POS  199-203  PROD-UOM            X(5)     Unit of Measure   *
+      *   POS  204-204  PROD-STATUS         X(1)     A/D/S             *
+      *   POS  205-212  PROD-DATE-ADDED     9(8)     YYYYMMDD          *
+      *   POS  213-220  PROD-DATE-MODIFIED  9(8)     YYYYMMDD          *
+      *   POS  221-250  FILLER              X(30)    Reserved          *
+      *                                                                 *
+      * PROD-UOM   : EACH  BOX   CASE  PAIR  SET                       *
+      * PROD-STATUS: A=Active  D=Discontinued  S=Seasonal              *
+      *                                                                 *
+      * CATEGORY / SUB-CATEGORY CODES:                                 *
+      *   ELEC - Electronics                                            *
+      *          MOBI  - Mobile Devices                                 *
+      *          LAPT  - Laptops & Computers                            *
+      *          TVHF  - TV & Home Theater                              *
+      *   CLTH - Clothing & Apparel                                     *
+      *          MENSW - Men's Clothing                                 *
+      *          WMNSW - Women's Clothing                               *
+      *          KIDSC - Kids' Clothing                                 *
+      *   HOME - Home & Garden                                          *
+      *          FRNTR - Furniture                                      *
+      *          KITCH - Kitchen & Dining                               *
+      *          GRDNR - Garden & Outdoor                               *
+      *   FOOD - Food & Grocery                                         *
+      *          BKFST - Breakfast & Cereal                             *
+      *          SNACK - Snacks & Chips                                 *
+      *          BEVER - Beverages                                      *
+      *================================================================*
+       01  PRODUCT-RECORD.
+           05  PROD-ID                  PIC 9(8).
+           05  PROD-NAME                PIC X(40).
+           05  PROD-DESCRIPTION         PIC X(60).
+           05  PROD-CATEGORY.
+               10  PROD-CAT-CODE        PIC X(4).
+               10  PROD-CAT-DESC        PIC X(25).
+           05  PROD-SUBCATEGORY.
+               10  PROD-SUBCAT-CODE     PIC X(6).
+               10  PROD-SUBCAT-DESC     PIC X(25).
+           05  PROD-PRICING.
+               10  PROD-UNIT-PRICE      PIC 9(7)V99.
+               10  PROD-UNIT-COST       PIC 9(7)V99.
+           05  PROD-INVENTORY.
+               10  PROD-QTY-ON-HAND     PIC 9(6).
+               10  PROD-REORDER-LVL     PIC 9(6).
+           05  PROD-UOM                 PIC X(5).
+           05  PROD-STATUS              PIC X(1).
+           05  PROD-DATE-ADDED          PIC 9(8).
+           05  PROD-DATE-MODIFIED       PIC 9(8).
+           05  FILLER                   PIC X(30).

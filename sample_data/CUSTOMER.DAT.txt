@@ -1,0 +1,8 @@
+100001James          AHarrington          4521 Meadowlark Dr            Apt 3B                        Austin              TX78701-1234USA+1-512-555-0101james.harrington@email.com              R2023031520260901A          
+100002Maria          LDelgado-Reyes       8892 Cypress Creek Blvd       Suite 200                     Houston             TX77040-5678USA+1-713-555-0234m.delgado@bizmail.net                   W2022061020260815A          
+100003Robert          Kim                 1025 Lakefront Ave                                          Chicago             IL60611-9900USA+1-312-555-0378rob.kim@outlook.com                     P2021010120260720A          
+100004Priya          SNataraj             330 Silicon Valley Rd         Building C                    San Jose            CA95110-2200USA+1-408-555-0499priya.nataraj@techcorp.io               C2024050120260830A          
+100005Linda          MOkafor              77 Birchwood Lane                                           Boston              MA02101-3344USA+1-617-555-0512linda.okafor@webmail.com                R2023092020260911I          
+100006Chen            Wei                 2201 Harbor View Dr           Unit 8F                       Seattle             WA98101-7700USA+1-206-555-0617chen.wei@pacific.net                    W2022021520260601A          
+100007Angela         RThompson            56 Oak Street                                               Denver              CO80203-4455USA+1-720-555-0723a.thompson@mailbox.com                  R2025010120260910A          
+100008Dmitri         VSorokin             990 Atlantic Blvd             P.O. Box 112                  Miami               FL33101-5500USA+1-305-555-0819dsorokin@globalmail.com                 P2021113020260101S          

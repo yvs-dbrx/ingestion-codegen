@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customers>
+  <record>
+    <customer_id>1001</customer_id>
+    <first_name>Jane</first_name>
+    <last_name>Doe</last_name>
+    <email>jane.doe@example.com</email>
+    <signup_date>2024-03-14</signup_date>
+    <lifetime_value>4820.50</lifetime_value>
+    <is_active>true</is_active>
+  </record>
+  <record>
+    <customer_id>1002</customer_id>
+    <first_name>Marcus</first_name>
+    <last_name>Lee</last_name>
+    <email>marcus.lee@example.com</email>
+    <signup_date>2024-05-02</signup_date>
+    <lifetime_value>1290.00</lifetime_value>
+    <is_active>true</is_active>
+  </record>
+  <record>
+    <customer_id>1003</customer_id>
+    <first_name>Priya</first_name>
+    <last_name>Nair</last_name>
+    <email>priya.nair@example.com</email>
+    <signup_date>2023-11-19</signup_date>
+    <lifetime_value>8630.75</lifetime_value>
+    <is_active>false</is_active>
+  </record>
+  <record>
+    <customer_id>1004</customer_id>
+    <first_name>Tom</first_name>
+    <last_name>Becker</last_name>
+    <email>tom.becker@example.com</email>
+    <signup_date>2025-01-08</signup_date>
+    <lifetime_value>340.00</lifetime_value>
+    <is_active>true</is_active>
+  </record>
+</customers>

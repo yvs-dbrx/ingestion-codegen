@@ -17,6 +17,29 @@ class ColumnSchema:
     spark_type: str      # PySpark type class name, e.g. "StringType"
     sql_type: str         # Databricks SQL DDL type, e.g. "STRING"
     nullable: bool = True
+    # COBOL only: original nested-field path (e.g. ["CUST-NAME", "FIRST-NAME"])
+    # for a leaf column that came from flattening a COBOL group item — Cobrix
+    # maps group items (level 05 with child level-10s) to Spark StructType
+    # columns, not flat scalars, so the deployed notebook needs this to
+    # rebuild a .getField() chain pulling the leaf value out. None for every
+    # other format, and for COBOL fields that were never nested to begin with.
+    struct_path: list[str] | None = None
+
+
+@dataclass
+class TableSpec:
+    """
+    One file/table within a multi-file ingestion job (one folder, one
+    notebook, one job — see codegen.infer_multi_schema/render_multi_notebook).
+    file_name is deliberately just the basename, not a full path: the
+    generated notebook joins it onto a single job-level source_folder
+    parameter at run time, so redeploying against a different folder
+    doesn't require regenerating the notebook.
+    """
+    table: str
+    file_name: str
+    source_path: str  # the path actually read at discovery time — informational (UI display), not used by the template
+    columns: list[ColumnSchema]
 
 
 # pandas dtype -> (PySpark type class, Databricks SQL DDL type)

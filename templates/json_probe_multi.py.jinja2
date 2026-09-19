@@ -1,0 +1,18 @@
+{% extends "_schema_probe_multi.py.jinja2" %}
+{% block read_sample %}
+{% if multiline %}
+    with open(source_path) as f:
+        data = json.load(f)
+    records = data[:sample_rows] if isinstance(data, list) else [data]
+{% else %}
+    records = []
+    with open(source_path) as f:
+        for i, line in enumerate(f):
+            if i >= sample_rows:
+                break
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+{% endif %}
+    df = pd.json_normalize(records)
+{% endblock %}

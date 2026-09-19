@@ -36,7 +36,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from schema_types import ColumnSchema, map_pandas_dtype
+from schema_types import ColumnSchema, TableSpec, map_pandas_dtype
 from inferrers.base import SchemaInferrer
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -44,6 +44,19 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 PROBE_TEMPLATES = {
     "csv": "csv_probe.py.jinja2",
     "json": "json_probe.py.jinja2",
+}
+
+# Multi-file counterpart of PROBE_TEMPLATES — see infer_multi(). One probe
+# job lists the folder AND samples every matching file, rather than one
+# job per file (which would be slow, and costly for a large folder).
+MULTI_PROBE_TEMPLATES = {
+    "csv": "csv_probe_multi.py.jinja2",
+    "json": "json_probe_multi.py.jinja2",
+}
+
+GLOB_PATTERNS = {
+    "csv": "*.csv",
+    "json": "*.json",
 }
 
 
@@ -135,3 +148,112 @@ class DatabricksRemoteInferrer(SchemaInferrer):
             pass  # cleanup best-effort — a leftover probe file isn't worth failing over
 
         return columns
+
+    def infer_multi(self, config: dict) -> list[TableSpec]:
+        """
+        Remote counterpart of codegen.infer_multi_schema(): the folder
+        listing AND every per-file sample read happen inside a single
+        probe job submitted to the client's cluster (see the multi-probe
+        templates), rather than this script listing the folder itself —
+        the control plane never touches the client's Volume/S3 folder
+        directly, not even just to list filenames. One job run regardless
+        of how many files are in the folder.
+
+        NOT YET LIVE-TESTED against a real workspace — same caveat as
+        infer() above.
+        """
+        from databricks.sdk import WorkspaceClient
+        from databricks.sdk.service import jobs as jobs_api
+        from databricks.sdk.service.workspace import ImportFormat, Language
+
+        file_format = config["format"]
+        source_folder = config["file_path"]
+        sample_rows = config.get("sample_rows", 1000)
+        existing_cluster_id = config.get("existing_cluster_id")
+        probe_path = config.get(
+            "probe_workspace_path",
+            f"/Workspace/Shared/ingestion_codegen_probes/probe_multi_{int(time.time())}",
+        )
+
+        if file_format not in MULTI_PROBE_TEMPLATES:
+            raise ValueError(
+                f"No multi-file schema probe template for format='{file_format}'. "
+                f"Available: {list(MULTI_PROBE_TEMPLATES.keys())}"
+            )
+
+        env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+        template = env.get_template(MULTI_PROBE_TEMPLATES[file_format])
+        rendered = template.render(
+            source_folder=source_folder,
+            glob_pattern=GLOB_PATTERNS[file_format],
+            sample_rows=sample_rows,
+            delimiter=config.get("delimiter", ","),
+            has_header=config.get("has_header", True),
+            multiline=config.get("multiline", False),
+        )
+
+        w = WorkspaceClient()
+
+        parent_dir = probe_path.rsplit("/", 1)[0]
+        w.workspace.mkdirs(parent_dir)
+
+        w.workspace.upload(
+            path=probe_path,
+            content=rendered.encode(),
+            format=ImportFormat.SOURCE,
+            language=Language.PYTHON,
+            overwrite=True,
+        )
+        print(f"Uploaded multi-file schema probe to {probe_path}")
+
+        task = jobs_api.SubmitTask(
+            task_key="schema_probe_multi",
+            notebook_task=jobs_api.NotebookTask(notebook_path=probe_path),
+            timeout_seconds=900,
+        )
+        if existing_cluster_id:
+            task.existing_cluster_id = existing_cluster_id
+
+        print("Submitting one-time multi-file probe run — this is NOT a persistent job.")
+        waiter = w.jobs.submit(run_name="schema-discovery-probe-multi", tasks=[task])
+        run = waiter.result()
+        print(f"Probe run finished with state: {run.state.result_state}")
+
+        probe_run_id = run.tasks[0].run_id
+        output = w.jobs.get_run_output(run_id=probe_run_id)
+        if output.error:
+            raise RuntimeError(f"Multi-file schema probe failed: {output.error}")
+
+        raw_result = json.loads(output.notebook_output.result)
+        if isinstance(raw_result, dict) and "error" in raw_result:
+            raise ValueError(raw_result["error"])
+
+        tables = []
+        for file_result in raw_result:
+            columns = []
+            for col in file_result["columns"]:
+                spark_type, sql_type = map_pandas_dtype(col["pandas_dtype"])
+                columns.append(
+                    ColumnSchema(
+                        name=col["name"],
+                        pandas_dtype=col["pandas_dtype"],
+                        spark_type=spark_type,
+                        sql_type=sql_type,
+                        nullable=col["nullable"],
+                    )
+                )
+            tables.append(
+                TableSpec(
+                    table=file_result["table"],
+                    file_name=file_result["file_name"],
+                    source_path=f"{source_folder.rstrip('/')}/{file_result['file_name']}",
+                    columns=columns,
+                )
+            )
+
+        try:
+            w.workspace.delete(probe_path)
+        except Exception:
+            pass
+
+        return tables

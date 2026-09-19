@@ -1,0 +1,48 @@
+      *================================================================*
+      * COPYBOOK : CUSTOMER.CPY                                        *
+      * PURPOSE  : Customer Master Record with Address Fields           *
+      * RECLEN   : 220 Characters (Fixed-Length)                       *
+      *                                                                 *
+      * FIELD MAP:                                                      *
+      *   POS  001-006  CUST-ID             9(6)     Customer ID       *
+      *   POS  007-021  CUST-FIRST-NAME     X(15)    First Name        *
+      *   POS  022-022  CUST-MIDDLE-INIT    X(1)     Middle Initial    *
+      *   POS  023-042  CUST-LAST-NAME      X(20)    Last Name         *
+      *   POS  043-072  CUST-STREET-LINE1   X(30)    Street Address 1  *
+      *   POS  073-102  CUST-STREET-LINE2   X(30)    Street Address 2  *
+      *   POS  103-122  CUST-CITY           X(20)    City              *
+      *   POS  123-124  CUST-STATE-CODE     X(2)     State (ISO-3166)  *
+      *   POS  125-134  CUST-ZIP-CODE       X(10)    ZIP / Postal Code *
+      *   POS  135-137  CUST-COUNTRY-CODE   X(3)     Country (ISO-3)   *
+      *   POS  138-152  CUST-PHONE          X(15)    Phone Number      *
+      *   POS  153-192  CUST-EMAIL          X(40)    Email Address     *
+      *   POS  193-193  CUST-TYPE           X(1)     R/W/P/C           *
+      *   POS  194-201  CUST-DATE-ADDED     9(8)     YYYYMMDD          *
+      *   POS  202-209  CUST-DATE-MODIFIED  9(8)     YYYYMMDD          *
+      *   POS  210-210  CUST-STATUS         X(1)     A/I/S             *
+      *   POS  211-220  FILLER              X(10)    Reserved          *
+      *                                                                 *
+      * CUST-TYPE  : R=Retail  W=Wholesale  P=Premium  C=Corporate     *
+      * CUST-STATUS: A=Active  I=Inactive   S=Suspended                *
+      *================================================================*
+       01  CUSTOMER-RECORD.
+           05  CUST-ID                  PIC 9(6).
+           05  CUST-NAME.
+               10  CUST-FIRST-NAME      PIC X(15).
+               10  CUST-MIDDLE-INIT     PIC X(1).
+               10  CUST-LAST-NAME       PIC X(20).
+           05  CUST-ADDRESS.
+               10  CUST-STREET-LINE1    PIC X(30).
+               10  CUST-STREET-LINE2    PIC X(30).
+               10  CUST-CITY            PIC X(20).
+               10  CUST-STATE-CODE      PIC X(2).
+               10  CUST-ZIP-CODE        PIC X(10).
+               10  CUST-COUNTRY-CODE    PIC X(3).
+           05  CUST-CONTACT.
+               10  CUST-PHONE           PIC X(15).
+               10  CUST-EMAIL           PIC X(40).
+           05  CUST-TYPE                PIC X(1).
+           05  CUST-DATE-ADDED          PIC 9(8).
+           05  CUST-DATE-MODIFIED       PIC 9(8).
+           05  CUST-STATUS              PIC X(1).
+           05  FILLER                   PIC X(10).

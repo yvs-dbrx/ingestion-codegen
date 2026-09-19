@@ -1,0 +1,51 @@
+# Local-dev control-plane database for the ingestion SaaS module.
+#
+# From this folder:
+#   docker compose up -d        start everything in the background
+#   docker compose ps           see what's running
+#   docker compose logs -f      watch logs (Ctrl+C to stop watching)
+#   docker compose down         stop (your data is KEPT in the pgdata volume)
+#   docker compose down -v      stop AND delete all data (also re-runs db/init/*.sql next start)
+#
+# Credentials below are local-dev defaults, and every port is bound to 127.0.0.1
+# only, so nothing here is reachable from other machines. Copy .env.example to
+# .env to override any of them.
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ingestion_saas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-ingestion_saas}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Scripts in here run automatically, in filename order, but ONLY the first
+      # time the database is created (empty pgdata volume). Later schema changes
+      # need a new migration, or `docker compose down -v` to start over in dev.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # $$ so Compose leaves the variables for the container's shell to expand
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional web UI for browsing tables: http://localhost:8080
+  # (System: PostgreSQL, Server: postgres, plus the user/password/database above)
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8080}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+
+volumes:
+  pgdata:

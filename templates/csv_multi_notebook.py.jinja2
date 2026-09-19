@@ -1,0 +1,10 @@
+{% extends "_base_multi_notebook.py.jinja2" %}
+{% block read_source %}
+df = (
+    spark.read
+    .option("header", "{{ has_header }}")
+    .option("delimiter", "{{ delimiter }}")
+    .schema(schema)
+    .csv(source_path)
+)
+{% endblock %}

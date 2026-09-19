@@ -1,0 +1,13 @@
+{% extends "_base_notebook.py.jinja2" %}
+{% block read_source %}
+# Requires the spark-xml data source — bundled natively in Databricks
+# Runtime 14.3+; on older runtimes, attach com.databricks:spark-xml_2.12
+# to the cluster first.
+df = (
+    spark.read
+    .format("xml")
+    .option("rowTag", "{{ row_tag }}")
+    .schema(schema)
+    .load(source_path)
+)
+{% endblock %}

@@ -147,6 +147,45 @@ to find out if it worked — check the printed job URL for status.
   deliberately, since duplicate jobs would be a real problem once this is
   running unattended on a schedule.
 
+## COBOL / mainframe setup (Cobrix)
+
+COBOL sources (via the Streamlit app, `streamlit run app.py` — not `cli.py`,
+which doesn't support this source type) are always remote: Cobrix, the
+library that understands copybook syntax and EBCDIC decoding, is a
+Spark/JVM data source, not something this app can run locally. You need
+an existing Databricks cluster with it attached, for both schema
+discovery and the deployed job.
+
+1. **Create a cluster** — Compute → Create compute. Use **Single User**
+   access mode (Standard/Shared mode needs an extra Unity Catalog
+   allowlist step from a metastore admin before a Maven library will
+   install — Single User skips that). Not serverless — serverless isn't
+   known to support attaching custom JARs.
+2. **Attach the Cobrix library** — open the cluster → **Libraries** tab →
+   **Install New** → source **Maven** → coordinates:
+   - `za.co.absa.cobrix:spark-cobol_2.12:2.11.0` for **Spark 3.x / DBR
+     16.x and below**
+   - `za.co.absa.cobrix:spark-cobol_2.13:2.11.0` for **Spark 4.0+ / DBR
+     17.x and above**
+
+   **Get the Scala suffix wrong and it doesn't fail cleanly** — this bit
+   the first real test of this feature (DBR 17.3 / Spark 4.0, which
+   dropped Scala 2.12 entirely): every discovery/deploy run against that
+   cluster failed with a generic `RunLifeCycleState.INTERNAL_ERROR` /
+   "Workload failed" instead of a clear version-mismatch message. If
+   COBOL discovery or deploy fails outright with that kind of error,
+   check the Libraries tab status and the Scala suffix before anything
+   else.
+3. Wait for the library to show **Installed** (green). Restart the
+   cluster if it was already running when you installed it.
+4. Copy the **cluster ID** from the cluster's URL
+   (`.../compute/clusters/<cluster-id>`) — paste it into both the
+   "Existing cluster ID" field in the app's Source section (used for
+   discovery) and the separate one in the Deploy section (used for the
+   scheduled job — it defaults to the same cluster but is editable if you
+   want the actual job to run somewhere else; wherever it runs still
+   needs Cobrix attached).
+
 ## Next step after this works
 
 Deployment automation for CSV → Databricks is the last piece of that one

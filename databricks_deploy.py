@@ -58,6 +58,7 @@ def deploy_and_schedule(
     timezone: str = "UTC",
     existing_cluster_id: str | None = None,
     run_now: bool = False,
+    extra_parameters: dict | None = None,
 ) -> dict:
     w = WorkspaceClient()  # auth resolved from env vars / ~/.databrickscfg
 
@@ -76,11 +77,12 @@ def deploy_and_schedule(
     print(f"Uploaded notebook to workspace path: {workspace_path}")
 
     # --- 2. Build the task ---
+    base_parameters = {"source_path": source_path_param, **(extra_parameters or {})}
     task = jobs_api.Task(
         task_key="ingest",
         notebook_task=jobs_api.NotebookTask(
             notebook_path=workspace_path,
-            base_parameters={"source_path": source_path_param},
+            base_parameters=base_parameters,
         ),
         timeout_seconds=3600,
     )
