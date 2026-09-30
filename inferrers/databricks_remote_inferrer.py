@@ -95,7 +95,9 @@ class DatabricksRemoteInferrer(SchemaInferrer):
             multiline=config.get("multiline", False),
         )
 
-        w = WorkspaceClient()
+        # A caller can inject an already-authenticated client (the SaaS backend passes one per
+        # org); left out, this authenticates from the environment as before (CLI / Streamlit).
+        w = config["workspace_client"] if config.get("workspace_client") is not None else WorkspaceClient()
 
         parent_dir = probe_path.rsplit("/", 1)[0]
         w.workspace.mkdirs(parent_dir)
@@ -192,7 +194,9 @@ class DatabricksRemoteInferrer(SchemaInferrer):
             multiline=config.get("multiline", False),
         )
 
-        w = WorkspaceClient()
+        # A caller can inject an already-authenticated client (the SaaS backend passes one per
+        # org); left out, this authenticates from the environment as before (CLI / Streamlit).
+        w = config["workspace_client"] if config.get("workspace_client") is not None else WorkspaceClient()
 
         parent_dir = probe_path.rsplit("/", 1)[0]
         w.workspace.mkdirs(parent_dir)

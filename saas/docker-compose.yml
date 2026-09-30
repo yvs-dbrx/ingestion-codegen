@@ -34,6 +34,59 @@ services:
       timeout: 5s
       retries: 10
 
+  # The API. Interactive docs + a login button to try it: http://localhost:8000/docs
+  # Code in ./backend is mounted into the container and reloads on save.
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: dev
+      # If you change POSTGRES_PASSWORD in .env, avoid the characters @ : / ? # in it —
+      # they'd need URL-encoding inside this connection string.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ingestion_saas}:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/${POSTGRES_DB:-ingestion_saas}
+      JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_change_me_0123456789}
+      # Browser origins allowed to call this API (the frontend runs on its own port, so the
+      # browser enforces CORS). Add the extra ones from CORS_EXTRA_ORIGINS in .env if you run
+      # the frontend somewhere other than the defaults below.
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-5173},http://127.0.0.1:${FRONTEND_PORT:-5173}${CORS_EXTRA_ORIGINS:+,${CORS_EXTRA_ORIGINS}}
+      # Fernet key protecting stored Databricks tokens. The built-in dev default only works while
+      # ENVIRONMENT=dev. Generate a real one: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-ZGV2LW9ubHktZmVybmV0LWtleS1kby1ub3QtdXNlISE=}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}   # 8 hours locally so /docs stays logged in; the app default is 60
+      SCHEMA_SQL_DIR: /schema                   # the test suite builds a throwaway DB from every *.sql here
+      WATCHFILES_FORCE_POLLING: "true"          # file-change detection across the Windows -> WSL mount
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./db/init:/schema:ro
+      # The codegen engine (same code the CLI and Streamlit app use), read-only, importable as /engine
+      - ../codegen.py:/engine/codegen.py:ro
+      - ../schema_types.py:/engine/schema_types.py:ro
+      - ../databricks_deploy.py:/engine/databricks_deploy.py:ro
+      - ../inferrers:/engine/inferrers:ro
+      - ../templates:/engine/templates:ro
+
+  # The web app: http://localhost:5173
+  # Code in ./frontend is mounted into the container and hot-reloads on save.
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Baked in at Vite's dev-server start, not at image build time — the browser calls the
+      # API directly at this URL, not through the frontend container.
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # anonymous volume: keeps the container's own (Linux) install, not the host's
+
   # Optional web UI for browsing tables: http://localhost:8080
   # (System: PostgreSQL, Server: postgres, plus the user/password/database above)
   adminer:

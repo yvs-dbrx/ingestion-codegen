@@ -152,7 +152,9 @@ def infer_schema(source_type: str, source_config: dict) -> list[ColumnSchema]:
     return inferrer.infer(source_config)
 
 
-def infer_schema_from_xsd(xsd_path: str, row_tag: str, location: str = "local") -> list[ColumnSchema]:
+def infer_schema_from_xsd(
+    xsd_path: str, row_tag: str, location: str = "local", workspace_client=None
+) -> list[ColumnSchema]:
     """
     Alternate schema-discovery path for XML sources: derive columns from
     an XSD's row-level element definition instead of sampling actual
@@ -163,7 +165,9 @@ def infer_schema_from_xsd(xsd_path: str, row_tag: str, location: str = "local") 
     inferrers/xsd_inferrer.py for scope (flat/shallow rows, same as
     xml_inferrer.py).
     """
-    return XSDSchemaInferrer().infer({"xsd_path": xsd_path, "row_tag": row_tag, "location": location})
+    return XSDSchemaInferrer().infer(
+        {"xsd_path": xsd_path, "row_tag": row_tag, "location": location, "workspace_client": workspace_client}
+    )
 
 
 def infer_cobol_schema(
@@ -172,6 +176,7 @@ def infer_cobol_schema(
     existing_cluster_id: str,
     is_record_sequence: bool = False,
     is_text: bool = False,
+    workspace_client=None,
 ) -> list[ColumnSchema]:
     """
     COBOL schema discovery is remote-only — bypasses get_inferrer()'s
@@ -191,6 +196,7 @@ def infer_cobol_schema(
             "existing_cluster_id": existing_cluster_id,
             "is_record_sequence": is_record_sequence,
             "is_text": is_text,
+            "workspace_client": workspace_client,
         }
     )
 

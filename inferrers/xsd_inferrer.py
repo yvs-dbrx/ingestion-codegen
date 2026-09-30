@@ -69,7 +69,11 @@ class XSDSchemaInferrer(SchemaInferrer):
         # text directly from the control plane doesn't cross the line that
         # data sampling does. See _fetch_remote_text for the two Databricks
         # path shapes this handles.
-        xsd_source = self._fetch_remote_text(xsd_path) if location == "databricks_workspace" else xsd_path
+        xsd_source = (
+            self._fetch_remote_text(xsd_path, config.get("workspace_client"))
+            if location == "databricks_workspace"
+            else xsd_path
+        )
 
         schema = xmlschema.XMLSchema(xsd_source)
         row_element = self._find_row_element(schema, row_tag)
@@ -117,7 +121,7 @@ class XSDSchemaInferrer(SchemaInferrer):
         return columns
 
     @staticmethod
-    def _fetch_remote_text(path: str) -> str:
+    def _fetch_remote_text(path: str, client=None) -> str:
         """
         Fetches a file's text content from a Databricks Workspace or
         Volume path. /Volumes/... paths go through the Files API (works
@@ -133,7 +137,7 @@ class XSDSchemaInferrer(SchemaInferrer):
         """
         from databricks.sdk import WorkspaceClient
 
-        w = WorkspaceClient()
+        w = client if client is not None else WorkspaceClient()
 
         if path.startswith("/Volumes/"):
             response = w.files.download(path)

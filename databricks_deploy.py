@@ -59,8 +59,11 @@ def deploy_and_schedule(
     existing_cluster_id: str | None = None,
     run_now: bool = False,
     extra_parameters: dict | None = None,
+    workspace_client: WorkspaceClient | None = None,
 ) -> dict:
-    w = WorkspaceClient()  # auth resolved from env vars / ~/.databrickscfg
+    # Auth is resolved from env vars / ~/.databrickscfg unless the caller injects an
+    # already-authenticated client (the SaaS backend passes a per-org one).
+    w = workspace_client if workspace_client is not None else WorkspaceClient()
 
     # --- 1. Upload the notebook ---
     parent_dir = workspace_path.rsplit("/", 1)[0]

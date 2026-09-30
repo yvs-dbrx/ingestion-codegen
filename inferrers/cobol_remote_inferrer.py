@@ -103,7 +103,7 @@ class CobolRemoteInferrer(SchemaInferrer):
             is_text=is_text,
         )
 
-        w = WorkspaceClient()
+        w = config["workspace_client"] if config.get("workspace_client") is not None else WorkspaceClient()
 
         parent_dir = probe_path.rsplit("/", 1)[0]
         w.workspace.mkdirs(parent_dir)
