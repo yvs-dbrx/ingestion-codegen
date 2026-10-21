@@ -18,6 +18,7 @@ The order of operations is what makes this safe:
 import re
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import time
 from pathlib import Path
@@ -29,10 +30,11 @@ from sqlalchemy.orm import Session
 
 from app.models import Org, Pipeline, PipelineRun, PipelineSource, SourceRegistry, Tier
 from app.schemas import PipelineDeployIn, PipelineIn, PipelineTableOut
+from app.services import assets as assets_svc
 from app.services import codegen_safety as safety
 from app.services import engine
 from app.services.databricks_client import ClientBuilder, client_for_org
-from app.services.errors import BadGateway, Conflict, NotFound, Unprocessable
+from app.services.errors import BadGateway, Conflict, NotFound, ServiceError, Unprocessable
 from app.services.tenancy import lock_org
 
 SOURCE_TYPES = {"csv", "json", "xml", "cobol"}
@@ -65,6 +67,12 @@ class Plan:
     extra_parameters: dict
     schedule_time: time
     problems: list[str] = field(default_factory=list)
+    # What distinguishes one kind of pipeline from another; Raw (files -> tables) is the default.
+    layer: str = "raw"
+    spec: dict = field(default_factory=dict)
+    # Runs inside the deploy transaction, after the pipeline row exists: links it to what it reads and
+    # registers the tables it writes. Anything it raises rolls the whole deploy back.
+    register: Callable[[Session, Pipeline], None] | None = None
 
 
 def workspace_path_for(org_id: uuid.UUID, job_name: str) -> str:
@@ -193,10 +201,18 @@ def build_plan(db: Session, org_id: uuid.UUID, body: PipelineIn, *, lock_sources
     except engine.EngineRemoteError as exc:
         raise Unprocessable(f"The notebook couldn't be generated: {exc}")
 
+    links = list(zip(rows, [t.table_name for t in body.tables]))
+
+    def register(db: Session, pipeline: Pipeline) -> None:
+        for source, table_name in links:
+            db.add(PipelineSource(pipeline_id=pipeline.id, source_registry_id=source.id, table_name=table_name))
+        db.flush()
+        assets_svc.register_raw_assets(db, pipeline=pipeline, links=links, tables=gen_tables)
+
     return Plan(
         source_type=source_type,
         mode=body.mode,
-        links=list(zip(rows, [t.table_name for t in body.tables])),
+        links=links,
         notebook=notebook,
         notebook_sha256=engine.notebook_sha256(notebook),
         workspace_path=workspace_path,
@@ -204,6 +220,7 @@ def build_plan(db: Session, org_id: uuid.UUID, body: PipelineIn, *, lock_sources
         source_path_param=folder if body.mode == "multi" else rows[0].source_path,
         extra_parameters={"copybook_path": rows[0].schema_definition_path} if source_type == "cobol" else {},
         schedule_time=time(hour, minute),
+        register=register,
     )
 
 
@@ -225,12 +242,35 @@ def deploy_pipeline(
     body: PipelineDeployIn,
     client_builder: ClientBuilder,
 ) -> Pipeline:
-    """Commits (or rolls back) itself: after Databricks has been changed, a failed commit must
+    """Deploys a Raw ingestion pipeline (files -> tables)."""
+    return deploy_plan(
+        db,
+        org_id=org_id,
+        user_id=user_id,
+        body=body,
+        client_builder=client_builder,
+        build=lambda lock: build_plan(db, org_id, body, lock_sources=lock),
+    )
+
+
+def deploy_plan(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body,
+    client_builder: ClientBuilder,
+    build: Callable[[bool], Plan],
+) -> Pipeline:
+    """The one deploy flow every kind of pipeline goes through. `body` supplies job_name, catalog,
+    target_schema, schedule, cluster_id, notebook_sha256 and run_now; `build(lock)` produces the Plan.
+
+    Commits (or rolls back) itself: after Databricks has been changed, a failed commit must
     trigger cleanup there, so this function has to own the whole transaction."""
     client = client_for_org(db, org_id, client_builder)
 
     lock_org(db, org_id)  # serializes plan-limit checks (and member changes) for this org
-    plan = build_plan(db, org_id, body, lock_sources=True)
+    plan = build(True)
     if plan.notebook_sha256 != body.notebook_sha256:
         raise Conflict(
             "The notebook no longer matches the one you previewed (a source changed, or the request differs) — "
@@ -244,7 +284,9 @@ def deploy_pipeline(
     pipeline = Pipeline(
         org_id=org_id,
         job_name=body.job_name,
-        mode=body.mode,
+        mode=plan.mode,
+        layer=plan.layer,
+        spec=plan.spec,
         catalog=body.catalog,
         target_schema=body.target_schema,
         schedule_frequency=body.schedule.frequency,
@@ -253,7 +295,7 @@ def deploy_pipeline(
         workspace_path=plan.workspace_path,
         notebook_source=plan.notebook,
         notebook_sha256=plan.notebook_sha256,
-        job_parameters={"source_path": plan.source_path_param, **plan.extra_parameters},
+        job_parameters={**({"source_path": plan.source_path_param} if plan.source_path_param else {}), **plan.extra_parameters},
         cluster_id=body.cluster_id,
         created_by=user_id,
     )
@@ -263,9 +305,13 @@ def deploy_pipeline(
     except IntegrityError:
         db.rollback()
         raise Conflict(f"A pipeline named {body.job_name!r} already exists in this organization")
-    for source, table_name in plan.links:
-        db.add(PipelineSource(pipeline_id=pipeline.id, source_registry_id=source.id, table_name=table_name))
-    db.flush()
+    # Same transaction as the pipeline: every failure path below rolls the registry entries back too.
+    if plan.register is not None:
+        try:
+            plan.register(db, pipeline)
+        except ServiceError:
+            db.rollback()
+            raise
 
     try:
         if engine.job_name_taken(client, body.job_name):

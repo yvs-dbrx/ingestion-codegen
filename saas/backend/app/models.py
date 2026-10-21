@@ -116,6 +116,8 @@ class Pipeline(Base):
     job_parameters: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     cluster_id: Mapped[str | None] = mapped_column(Text)
     notebook_sha256: Mapped[str | None] = mapped_column(Text)
+    layer: Mapped[str] = mapped_column(Text, server_default="raw")
+    spec: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -130,6 +132,7 @@ class PipelineRun(Base):
     triggered_by: Mapped[str] = mapped_column(Text, server_default="schedule")
     status: Mapped[str] = mapped_column(Text, server_default="pending")
     rows_by_table: Mapped[dict | None] = mapped_column(JSONB)
+    metrics: Mapped[dict | None] = mapped_column(JSONB)
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -142,3 +145,30 @@ class PipelineSource(Base):
     pipeline_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipelines.id"), primary_key=True)
     source_registry_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_registry.id"), primary_key=True)
     table_name: Mapped[str] = mapped_column(Text)
+
+
+class DataAsset(Base):
+    __tablename__ = "data_assets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), **_uuid_pk)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"))
+    catalog: Mapped[str] = mapped_column(Text)
+    schema_name: Mapped[str] = mapped_column(Text)
+    table_name: Mapped[str] = mapped_column(Text)
+    layer: Mapped[str] = mapped_column(Text)
+    source_system: Mapped[str | None] = mapped_column(Text)
+    origin: Mapped[str | None] = mapped_column(Text)
+    produced_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pipelines.id"))
+    columns: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # [{name, sql_type}], source columns only
+    row_count: Mapped[int | None] = mapped_column(BigInteger)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AssetLineage(Base):
+    __tablename__ = "asset_lineage"
+
+    downstream_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_assets.id"), primary_key=True)
+    upstream_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_assets.id"), primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"))

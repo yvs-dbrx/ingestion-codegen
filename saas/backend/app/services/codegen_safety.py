@@ -43,6 +43,20 @@ SQL_TO_SPARK = {
 DECIMAL = re.compile(r"^DECIMAL\((\d{1,2}),(\d{1,2})\)$")
 RESERVED_COLUMNS = {"_ingested_at", "_source_file", "_batch_id"}  # the lineage columns every pipeline adds
 WEEKDAYS = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
+# Constants a user types into a Silver transform (values to treat as empty, a default, the unknown
+# member). Letters, digits, spaces and a few separators only: no quotes, backslashes or control
+# characters, so whatever else happens a value can't break out of the SQL string it is placed in.
+SIMPLE_TEXT = re.compile(r"^[A-Za-z0-9 _.\-/+:@#]{0,64}$")
+# The only date / timestamp layouts a transform may use (Spark datetime patterns).
+DATE_FORMATS = ("yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd", "MM/dd/yyyy", "dd/MM/yyyy", "dd-MM-yyyy", "MMddyyyy", "ddMMyyyy")
+TIMESTAMP_FORMATS = (
+    "yyyy-MM-dd HH:mm:ss",
+    "yyyy-MM-dd HH:mm:ss.SSS",
+    "yyyy-MM-dd'T'HH:mm:ss",
+    "yyyyMMddHHmmss",
+    "MM/dd/yyyy HH:mm:ss",
+    "dd/MM/yyyy HH:mm:ss",
+)
 
 
 class UnsafeInput(ValueError):
@@ -69,6 +83,15 @@ def collect(problems: list[str], fn, *args, **kwargs):
 def check_identifier(value: str, what: str) -> str:
     _fail_if([] if IDENTIFIER.match(value or "") else [
         f"{what} {value!r} must start with a letter or underscore and contain only letters, digits and underscores (max 128)"
+    ])
+    return value
+
+
+def check_simple_text(value: str, what: str, *, allow_empty: bool = True) -> str:
+    ok = isinstance(value, str) and SIMPLE_TEXT.match(value) is not None and (allow_empty or value != "")
+    _fail_if([] if ok else [
+        f"{what} {value!r} may only contain letters, digits, spaces and . _ - / + : @ # (max 64)"
+        + ("" if allow_empty else ", and can't be empty")
     ])
     return value
 

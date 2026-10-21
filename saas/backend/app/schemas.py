@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Path = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2048)]
@@ -241,6 +241,7 @@ class PipelineTableOut(BaseModel):
 
 class PipelineOut(BaseModel):
     id: uuid.UUID
+    layer: Literal["raw", "bronze", "silver", "gold"] = "raw"
     job_name: str
     mode: str
     catalog: str
@@ -261,6 +262,120 @@ class PipelineDetailOut(PipelineOut):
     notebook_source: str | None
     job_parameters: dict
     notebook_sha256: str | None
+    spec: dict = Field(default_factory=dict)  # Bronze / Silver: what it reads and what it writes
+
+
+# --- bronze pipelines (distinct records from Raw tables) ------------------------------
+
+class BronzeInputIn(BaseModel):
+    asset_id: uuid.UUID  # a Raw table from GET /assets?layer=raw
+    table_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]  # the Bronze table to write
+
+
+class BronzePipelineIn(BaseModel):
+    job_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    catalog: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    target_schema: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    inputs: list[BronzeInputIn] = Field(min_length=1, max_length=200)
+    schedule: ScheduleIn = Field(default_factory=ScheduleIn)
+    cluster_id: str | None = None
+
+
+class BronzeDeployIn(BronzePipelineIn):
+    notebook_sha256: str = Field(min_length=64, max_length=64)
+    run_now: bool = False
+
+
+# --- silver pipelines (integrated entities built from a Bronze table) --------------------
+
+class _Step(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # an unknown field is a mistake, never silently ignored
+
+
+class TrimStep(_Step):
+    kind: Literal["trim"]
+
+
+class UpperStep(_Step):
+    kind: Literal["upper"]
+
+
+class LowerStep(_Step):
+    kind: Literal["lower"]
+
+
+class NullIfStep(_Step):
+    kind: Literal["null_if"]
+    values: list[str] = Field(min_length=1, max_length=20)  # compared as trimmed text
+
+
+class CastStep(_Step):
+    kind: Literal["cast"]
+    type: str = Field(max_length=40)
+
+
+class ParseDateStep(_Step):
+    kind: Literal["parse_date"]
+    format: str = Field(max_length=40)
+
+
+class ParseTimestampStep(_Step):
+    kind: Literal["parse_timestamp"]
+    format: str = Field(max_length=40)
+
+
+class DefaultStep(_Step):
+    kind: Literal["default"]
+    value: str = Field(max_length=64)
+
+
+SilverStep = Annotated[
+    Union[TrimStep, UpperStep, LowerStep, NullIfStep, CastStep, ParseDateStep, ParseTimestampStep, DefaultStep],
+    Field(discriminator="kind"),
+]
+
+
+class SilverAttributeIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    source_column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    steps: list[SilverStep] = Field(default_factory=list, max_length=8)
+    required: bool = False  # a record with no value here is quarantined
+
+
+class SilverMasterKeyIn(BaseModel):
+    column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]  # the master key column to add
+    crosswalk_asset_id: uuid.UUID  # a reference table from POST /assets/reference
+    system_column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    key_column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    master_column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    # For a crosswalk that holds several kinds of thing (customer, product, ...): which column says
+    # which, and the value that means this table's kind. Give both or neither.
+    entity_type_column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)] | None = None
+    entity_type: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None = None
+
+
+class SilverEntityIn(BaseModel):
+    table_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    business_key: list[str] = Field(min_length=1, max_length=5)  # attribute names
+    attributes: list[SilverAttributeIn] = Field(min_length=1, max_length=200)
+    master_key: SilverMasterKeyIn | None = None
+
+
+class SilverPipelineIn(BaseModel):
+    job_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    catalog: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    target_schema: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    source_asset_id: uuid.UUID  # a Bronze table from GET /assets?layer=bronze
+    source_system: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]  # matched against the crosswalk
+    unknown_master_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] = "UNKNOWN"
+    entities: list[SilverEntityIn] = Field(min_length=1, max_length=20)
+    schedule: ScheduleIn = Field(default_factory=ScheduleIn)
+    cluster_id: str | None = None
+
+
+class SilverDeployIn(SilverPipelineIn):
+    notebook_sha256: str = Field(min_length=64, max_length=64)
+    run_now: bool = False
 
 
 # --- runs ----------------------------------------------------------------------------
@@ -276,7 +391,8 @@ class RunOut(BaseModel):
     triggered_by: Literal["schedule", "manual", "deploy"]
     status: RunStatus
     error_message: str | None
-    rows_by_table: dict | None  # not filled yet: the generated notebooks don't report row counts
+    rows_by_table: dict | None  # superseded by `metrics`; kept for older rows
+    metrics: dict | None  # counts the run's notebook reported (see services/run_metrics.py); None until fetched
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
@@ -284,6 +400,57 @@ class RunOut(BaseModel):
 
 class OrgRunOut(RunOut):
     job_name: str
+
+
+# --- table registry -----------------------------------------------------------------
+
+AssetLayer = Literal["raw", "bronze", "silver", "gold", "reference"]
+
+
+class AssetRef(BaseModel):
+    id: uuid.UUID
+    full_name: str
+    layer: AssetLayer
+
+
+class AssetProducer(BaseModel):
+    pipeline_id: uuid.UUID
+    job_name: str
+
+
+class AssetOut(BaseModel):
+    id: uuid.UUID
+    catalog: str
+    schema_name: str
+    table_name: str
+    full_name: str  # catalog.schema.table
+    layer: AssetLayer
+    source_system: str | None
+    origin: str | None
+    produced_by: AssetProducer | None  # None once its pipeline was deleted (the table itself remains)
+    column_count: int
+    row_count: int | None
+    last_run_at: datetime | None
+    created_at: datetime
+    upstream_count: int
+    downstream_count: int
+
+
+class AssetColumn(BaseModel):
+    name: str
+    sql_type: str
+
+
+class AssetDetailOut(AssetOut):
+    columns: list[AssetColumn]
+    upstream: list[AssetRef]
+    downstream: list[AssetRef]
+
+
+class ReferenceTableIn(BaseModel):
+    catalog: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    schema_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    table_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
 
 
 PipelineOut.model_rebuild()

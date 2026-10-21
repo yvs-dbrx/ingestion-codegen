@@ -8,5 +8,10 @@ export default defineConfig({
   server: {
     host: true, // reachable from outside the container
     port: 5173,
+    watch: {
+      // chokidar doesn't see change events across the Windows -> container bind mount without
+      // this (same issue the backend's WATCHFILES_FORCE_POLLING works around).
+      usePolling: true,
+    },
   },
 })

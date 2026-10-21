@@ -24,6 +24,7 @@ class NotAllowed(ServiceError):
 def _out(pipeline: Pipeline, tables: list, last_run=None) -> dict:
     return {
         "id": pipeline.id,
+        "layer": pipeline.layer,
         "job_name": pipeline.job_name,
         "mode": pipeline.mode,
         "catalog": pipeline.catalog,
@@ -38,6 +39,19 @@ def _out(pipeline: Pipeline, tables: list, last_run=None) -> dict:
         "created_at": pipeline.created_at,
         "tables": tables,
         "last_run": run_out(last_run) if last_run else None,
+    }
+
+
+def detail_out(db: Session, org_id: uuid.UUID, pipeline: Pipeline) -> dict:
+    """The full pipeline response — shared by every route that returns one."""
+    tables = svc.table_links(db, org_id, [pipeline.id])[pipeline.id]
+    last_run = runs_svc.latest_runs(db, [pipeline.id]).get(pipeline.id)
+    return {
+        **_out(pipeline, tables, last_run),
+        "notebook_source": pipeline.notebook_source,
+        "job_parameters": pipeline.job_parameters,
+        "notebook_sha256": pipeline.notebook_sha256,
+        "spec": pipeline.spec or {},
     }
 
 
@@ -67,9 +81,7 @@ def deploy(
 ):
     """Uploads the previewed notebook to your Databricks workspace and schedules it as a job."""
     pipeline = svc.deploy_pipeline(db, org_id=ctx.org.id, user_id=ctx.user.id, body=body, client_builder=builder)
-    tables = svc.table_links(db, ctx.org.id, [pipeline.id])[pipeline.id]
-    last_run = runs_svc.latest_runs(db, [pipeline.id]).get(pipeline.id)
-    return {**_out(pipeline, tables, last_run), "notebook_source": pipeline.notebook_source, "job_parameters": pipeline.job_parameters, "notebook_sha256": pipeline.notebook_sha256}
+    return detail_out(db, ctx.org.id, pipeline)
 
 
 @router.get("", response_model=list[PipelineOut])
@@ -83,10 +95,7 @@ def list_pipelines(ctx: OrgContext = Depends(get_org_context), db: Session = Dep
 
 @router.get("/{pipeline_id}", response_model=PipelineDetailOut)
 def get_pipeline(pipeline_id: uuid.UUID, ctx: OrgContext = Depends(get_org_context), db: Session = Depends(get_db)):
-    pipeline = _owned(db, ctx.org.id, pipeline_id)
-    tables = svc.table_links(db, ctx.org.id, [pipeline.id])[pipeline.id]
-    last_run = runs_svc.latest_runs(db, [pipeline.id]).get(pipeline.id)
-    return {**_out(pipeline, tables, last_run), "notebook_source": pipeline.notebook_source, "job_parameters": pipeline.job_parameters, "notebook_sha256": pipeline.notebook_sha256}
+    return detail_out(db, ctx.org.id, _owned(db, ctx.org.id, pipeline_id))
 
 
 @router.delete("/{pipeline_id}", status_code=status.HTTP_204_NO_CONTENT)

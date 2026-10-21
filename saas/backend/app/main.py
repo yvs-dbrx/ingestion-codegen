@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.routers import account, auth, connection, discovery, members, pipelines, runs, sources
+from app.routers import account, assets, auth, bronze, connection, discovery, members, pipelines, runs, silver, sources
 from app.services.errors import ServiceError
 
 
@@ -48,6 +48,9 @@ app.include_router(connection.router)
 app.include_router(discovery.router)
 app.include_router(pipelines.router)
 app.include_router(runs.router)
+app.include_router(assets.router)
+app.include_router(bronze.router)
+app.include_router(silver.router)
 
 
 @app.exception_handler(ServiceError)

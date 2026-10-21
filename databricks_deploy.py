@@ -80,7 +80,8 @@ def deploy_and_schedule(
     print(f"Uploaded notebook to workspace path: {workspace_path}")
 
     # --- 2. Build the task ---
-    base_parameters = {"source_path": source_path_param, **(extra_parameters or {})}
+    # A pipeline that reads tables rather than a file has no source path: pass "" and it is simply omitted.
+    base_parameters = {**({"source_path": source_path_param} if source_path_param else {}), **(extra_parameters or {})}
     task = jobs_api.Task(
         task_key="ingest",
         notebook_task=jobs_api.NotebookTask(

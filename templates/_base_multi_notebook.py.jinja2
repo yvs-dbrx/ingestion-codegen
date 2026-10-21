@@ -12,6 +12,7 @@ from pyspark.sql.types import (
     StructType, StructField,
     {{ spark_type_imports }}
 )
+import json
 import uuid
 
 # COMMAND ----------
@@ -27,6 +28,7 @@ dbutils.widgets.text("batch_id", str(uuid.uuid4()))
 
 source_folder = dbutils.widgets.get("source_path").rstrip("/")
 batch_id = dbutils.widgets.get("batch_id")
+results = {}
 {% for t in tables %}
 # COMMAND ----------
 
@@ -77,8 +79,19 @@ USING DELTA
 
 df.write.mode("append").saveAsTable(target_table)
 
-print(f"Ingested {df.count()} rows into {target_table} (batch_id={batch_id})")
+rows_written = df.count()
+print(f"Ingested {rows_written} rows into {target_table} (batch_id={batch_id})")
+results["{{ t.table }}"] = {
+    "source": source_path, "target": target_table,
+    "rows_read": rows_written, "rows_written": rows_written,
+    "rows_in_target": spark.table(target_table).count(),
+}
 {% endfor %}
 # COMMAND ----------
 
 print("Multi-file ingestion job complete.")
+
+# COMMAND ----------
+
+# Hand the run's counts back to the platform (shown in the pipeline's run history).
+dbutils.notebook.exit(json.dumps({"v": 1, "layer": "raw", "mode": "append", "reconciled": True, "tables": results}))

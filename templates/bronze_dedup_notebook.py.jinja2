@@ -1,0 +1,199 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ## Auto-generated Bronze notebook — distinct records
+# MAGIC Keeps **one copy of each distinct record** from the Raw table(s) below.
+# MAGIC
+# MAGIC - Two records are the same only if **every source column is identical**. The lineage columns
+# MAGIC   (`_ingested_at`, `_source_file`, `_batch_id`) are not compared; the first-seen values are kept.
+# MAGIC - A record whose values changed is a *different* record, so every version is kept. Choosing the
+# MAGIC   latest version per business key is a Silver concern.
+# MAGIC - **Insert-only:** existing Bronze rows are never updated or deleted, so re-running is always safe.
+# MAGIC - **Sightings:** a companion table `<bronze table>_sightings` records every load a record appeared in
+# MAGIC   (also insert-only). Bronze keeps a record once; the sightings are how Silver knows which version is
+# MAGIC   current when values change and then change back.
+# MAGIC
+# MAGIC | Raw table | Bronze table |
+# MAGIC |---|---|
+# MAGIC {% for t in tables %}| `{{ t.raw }}` | `{{ t.bronze }}` |
+# MAGIC {% endfor %}
+
+# COMMAND ----------
+
+import json
+
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+
+# COMMAND ----------
+
+# The columns that decide whether two records are the same. Fixed when this notebook was generated
+# and reviewed — deliberately NOT re-read from the table at run time. If the compared columns could
+# change silently, every record's identity would change with them and the whole table would
+# re-insert as "new".
+TABLES = [
+{% for t in tables %}
+    {
+        "raw": {{ t.raw | tojson }},
+        "bronze": {{ t.bronze | tojson }},
+        "sightings": {{ t.sightings | tojson }},
+        "name": {{ t.name | tojson }},
+        "columns": {{ t.columns | tojson }},  # [column name, SQL type]
+    },
+{% endfor %}
+]
+LINEAGE = ["_ingested_at", "_source_file", "_batch_id"]
+
+# COMMAND ----------
+
+
+def canonical(name, sql_type):
+    """One column as unambiguous text.
+
+    Every value is length-prefixed, so ("ab", "c") can never be confused with ("a", "bc"), and NULL
+    is distinct from an empty string. Timestamps are hashed as epoch microseconds rather than as a
+    formatted string: a string shifts with the session time zone, which would re-hash every record
+    the first time a job ran under a different setting.
+    """
+    col = F.col("`" + name + "`")
+    if sql_type == "BINARY":
+        text = F.hex(col)
+    elif sql_type == "TIMESTAMP":
+        text = F.expr("cast(unix_micros(`" + name + "`) as string)")
+    else:
+        text = col.cast("string")
+    return F.when(col.isNull(), F.lit("N")).otherwise(
+        F.concat(F.lit("V"), F.length(text).cast("string"), F.lit(":"), text)
+    )
+
+
+def record_hash(columns):
+    return F.sha2(F.concat_ws("|", *[canonical(n, t) for n, t in columns]), 256)
+
+
+# COMMAND ----------
+
+results = {}
+
+for t in TABLES:
+    names = [n for n, _ in t["columns"]]
+    raw = spark.table(t["raw"])
+
+    missing = [c for c in names + LINEAGE if c not in raw.columns]
+    if missing:
+        raise ValueError(
+            f"{t['raw']} no longer has column(s) this notebook compares: {missing}. "
+            "Regenerate this pipeline from the table's current schema."
+        )
+    # Columns added to Raw after this notebook was generated are not compared (that would change every
+    # record's identity); they are reported so the pipeline can be regenerated deliberately.
+    extra = [c for c in raw.columns if c not in names and c not in LINEAGE]
+
+    column_ddl = ",\n        ".join(f"`{n}` {ty}" for n, ty in t["columns"])
+    spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {t['bronze']} (
+        {column_ddl},
+        _record_hash STRING,
+        _ingested_at TIMESTAMP,
+        _source_file STRING,
+        _batch_id STRING
+    )
+    USING DELTA
+    """)
+
+    spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {t['sightings']} (
+        _record_hash STRING,
+        _batch_id STRING,
+        _ingested_at TIMESTAMP
+    )
+    USING DELTA
+    """)
+
+    hashed = raw.select(
+        *[F.col(f"`{n}`") for n in names],
+        F.col("_ingested_at"),
+        F.col("_source_file"),
+        F.col("_batch_id"),
+        record_hash(t["columns"]).alias("_record_hash"),
+    )
+
+    stats = hashed.agg(
+        F.count(F.lit(1)).alias("rows"),
+        F.countDistinct("_record_hash").alias("distinct_records"),
+    ).first()
+    raw_rows, distinct_rows = stats["rows"], stats["distinct_records"]
+
+    # Of the copies of a record, keep the earliest (a fixed tie-break keeps this deterministic).
+    earliest_first = Window.partitionBy("_record_hash").orderBy(
+        F.col("_ingested_at").asc_nulls_last(),
+        F.col("_batch_id").asc_nulls_last(),
+        F.col("_source_file").asc_nulls_last(),
+    )
+    first_seen = (
+        hashed.withColumn("_rn", F.row_number().over(earliest_first))
+        .filter("_rn = 1")
+        .drop("_rn")
+    )
+    first_seen.createOrReplaceTempView("_refinaire_incoming")
+
+    rows_before = spark.table(t["bronze"]).count()
+    merge_result = spark.sql(f"""
+        MERGE INTO {t['bronze']} AS tgt
+        USING _refinaire_incoming AS src
+        ON tgt._record_hash = src._record_hash
+        WHEN NOT MATCHED THEN INSERT *
+    """).first()
+    rows_after = spark.table(t["bronze"]).count()
+
+    # One sighting per (record, load). Insert-only like Bronze itself.
+    sightings_before = spark.table(t["sightings"]).count()
+    (
+        hashed.groupBy("_record_hash", "_batch_id")
+        .agg(F.min("_ingested_at").alias("_ingested_at"))
+        .createOrReplaceTempView("_refinaire_sightings_incoming")
+    )
+    spark.sql(f"""
+        MERGE INTO {t['sightings']} AS tgt
+        USING _refinaire_sightings_incoming AS src
+        ON tgt._record_hash = src._record_hash AND tgt._batch_id <=> src._batch_id
+        WHEN NOT MATCHED THEN INSERT *
+    """)
+    sightings_after = spark.table(t["sightings"]).count()
+
+    inserted = rows_after - rows_before
+    already_present = distinct_rows - inserted
+    reported_by_merge = merge_result.asDict().get("num_inserted_rows") if merge_result is not None else None
+    reconciled = inserted >= 0 and already_present >= 0 and reported_by_merge in (None, inserted)
+
+    results[t["name"]] = {
+        "source": t["raw"],
+        "target": t["bronze"],
+        "rows_read": raw_rows,
+        "duplicates_removed": raw_rows - distinct_rows,
+        "distinct_records": distinct_rows,
+        "rows_inserted": inserted,
+        "already_in_target": already_present,
+        "rows_in_target": rows_after,
+        "sightings_inserted": sightings_after - sightings_before,
+        "sightings_in_target": sightings_after,
+        "extra_source_columns": extra,
+        "reconciled": reconciled,
+    }
+    print(
+        f"{t['bronze']}: read {raw_rows}, {raw_rows - distinct_rows} duplicates removed, "
+        f"{inserted} new, {already_present} already present -> {rows_after} rows"
+        + ("" if reconciled else "  [COUNTS DO NOT RECONCILE]")
+        + (f"  [new Raw columns not compared: {extra}]" if extra else "")
+    )
+
+# COMMAND ----------
+
+# Hand the run's counts back to the platform (shown in the pipeline's run history).
+# mode "full": every run re-reads all of Raw; the insert-only MERGE makes that safe.
+dbutils.notebook.exit(json.dumps({
+    "v": 1,
+    "layer": "bronze",
+    "mode": "full",
+    "reconciled": all(r["reconciled"] for r in results.values()),
+    "tables": results,
+}))

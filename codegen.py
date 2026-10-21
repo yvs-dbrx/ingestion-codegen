@@ -14,10 +14,11 @@ prototype — see the project README for why that's a deliberate next
 step, not this one.
 """
 
+import json
 import re
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from schema_types import ColumnSchema, TableSpec
 from inferrers.csv_inferrer import CSVSchemaInferrer
@@ -309,8 +310,57 @@ def render_notebook(
     return str(out)
 
 
+def bronze_sightings_table(bronze_table: str) -> str:
+    """The companion table that records every load a Bronze record appeared in. Silver reads it by
+    this same name, so the convention lives in exactly one place."""
+    return f"{bronze_table}_sightings"
+
+
+def render_bronze_notebook(tables: list[dict], output_path: str) -> str:
+    """
+    Renders the notebook that turns Raw tables into Bronze ones (one copy of each distinct record).
+
+    `tables` is [{"raw": "cat.schema.table", "bronze": "cat.schema.table", "name": "table",
+    "columns": [(column name, SQL type), ...]}]. Only the source columns belong in `columns`
+    (not the lineage columns) — they are exactly what decides whether two records are the same.
+    The caller must already have validated every value: they are written into the notebook.
+    """
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), undefined=StrictUndefined)
+    rendered = env.get_template("bronze_dedup_notebook.py.jinja2").render(
+        tables=[
+            {**t, "sightings": bronze_sightings_table(t["bronze"]), "columns": [list(c) for c in t["columns"]]}
+            for t in tables
+        ]
+    )
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(rendered, encoding="utf-8")
+    return str(out)
+
+
+def render_silver_notebook(spec: dict, output_path: str) -> str:
+    """
+    Renders the notebook that builds Silver entities from one Bronze table.
+
+    `spec` is {"source": {"bronze": "cat.schema.table", "system": "NAME"}, "unknown_master_key": "...",
+    "entities": [{"name", "target", "quarantine", "business_key": [attribute names],
+    "attributes": [{"name", "from", "type", "required", "steps": [...]}], "master_key": None | {...}}]}.
+    The notebook is a small fixed interpreter: everything the user chose arrives as this data, never as
+    code. The caller must already have validated every value in it.
+    """
+    spec = {**spec, "source": {**spec["source"], "sightings": bronze_sightings_table(spec["source"]["bronze"])}}
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), undefined=StrictUndefined)
+    rendered = env.get_template("silver_notebook.py.jinja2").render(
+        spec=spec, spec_json=json.dumps(spec, sort_keys=True)
+    )
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(rendered, encoding="utf-8")
+    return str(out)
+
+
 def sanitize_table_name(name: str) -> str:
-    """Derives a safe default Bronze table name from a file stem (e.g. 'Order Item' -> 'order_item')."""
+    """Derives a safe default target table name from a file stem (e.g. 'Order Item' -> 'order_item')."""
     name = re.sub(r"[^0-9a-zA-Z_]", "_", name.strip().lower()).strip("_")
     if not name:
         return "table"

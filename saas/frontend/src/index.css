@@ -1,31 +1,32 @@
 @import 'tailwindcss';
 
 /* Refinaire placeholder brand tokens — swap these once real brand colors are chosen.
-   Theme: refining raw material into something valuable — warm copper/amber accent
-   against a clean neutral base. */
+   Theme: light grey (the raw, unrefined material) with a gold accent (what it's refined
+   into) — deliberately restrained rather than shiny/yellow, so it reads as precious metal
+   rather than a "warning" color. */
 :root {
-  --color-bg: #fbfaf8;
+  --color-bg: #f5f4f1;
   --color-surface: #ffffff;
-  --color-border: #e7e2da;
-  --color-text: #33302b;
-  --color-text-muted: #7a746a;
-  --color-accent: #b5651d; /* refined copper */
-  --color-accent-hover: #9a5518;
-  --color-accent-contrast: #ffffff;
+  --color-border: #ddd9d0;
+  --color-text: #2a2822;
+  --color-text-muted: #726c60;
+  --color-accent: #a9841f; /* muted gold */
+  --color-accent-hover: #8f6f19;
+  --color-accent-contrast: #fffaf0;
   --color-danger: #b3261e;
   --color-success: #2e7d32;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #17140f;
-    --color-surface: #211c15;
-    --color-border: #392f22;
-    --color-text: #f2ede3;
-    --color-text-muted: #a89d8a;
-    --color-accent: #e08a3c;
-    --color-accent-hover: #f09a4c;
-    --color-accent-contrast: #17140f;
+    --color-bg: #1c1b19;
+    --color-surface: #252420;
+    --color-border: #3b382f;
+    --color-text: #ede9df;
+    --color-text-muted: #a39c8a;
+    --color-accent: #d3ac53; /* lighter gold for dark backgrounds */
+    --color-accent-hover: #e0bd6b;
+    --color-accent-contrast: #211a08;
     --color-danger: #e5675f;
     --color-success: #5cb85c;
   }

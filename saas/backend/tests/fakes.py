@@ -22,6 +22,9 @@ class FakeWorkspace:
         self.remote_runs: dict[int, dict] = {}  # everything Databricks "knows" about, by run id
         self.fail_run_now = False
         self.fail_list_runs = False
+        self.run_outputs: dict[int, str] = {}  # job-run id -> what its notebook passed to dbutils.notebook.exit()
+        self.fail_run_output = False
+        self.output_reads: list[int] = []  # task-run ids whose output was fetched
         self.run_delay = 0.0  # seconds run_now takes — widens race windows
         self.rejected_tokens: set[str] = set()
         self.builds: list[tuple[str, str]] = []  # (host, token) each time the backend built a client
@@ -42,9 +45,18 @@ class FakeWorkspace:
             reset=self._reset_job,
             run_now=self._run_now,
             list_runs=self._list_runs,
+            get_run=self._get_run,
+            get_run_output=self._get_run_output,
             delete=self._delete_job,
         )
+        self.tables_by_name: dict[str, list[tuple[str, str]]] = {}  # full name -> [(column, type_text)]
+        self.tables = SimpleNamespace(get=self._get_table)
         self._token = ""
+
+    def _get_table(self, full_name):
+        if full_name not in self.tables_by_name:
+            raise NotFound(f"Table '{full_name}' does not exist.")
+        return SimpleNamespace(columns=[SimpleNamespace(name=n, type_text=t) for n, t in self.tables_by_name[full_name]])
 
     # The backend's client builder calls this: (host, token) -> client
     def build(self, host: str, token: str) -> "FakeWorkspace":
@@ -124,6 +136,22 @@ class FakeWorkspace:
             )
             for i in rows
         )
+
+    TASK_OFFSET = 1_000_000  # a job's task run has its own id, as in Databricks
+
+    def _get_run(self, run_id):
+        if run_id not in self.remote_runs:
+            raise NotFound(f"run {run_id} does not exist")
+        return SimpleNamespace(run_id=run_id, tasks=[SimpleNamespace(run_id=run_id + self.TASK_OFFSET)])
+
+    def _get_run_output(self, run_id):
+        job_run = run_id - self.TASK_OFFSET
+        # True: every read fails. A set: only reads of those job runs fail.
+        if self.fail_run_output is True or (isinstance(self.fail_run_output, (set, frozenset)) and job_run in self.fail_run_output):
+            raise RuntimeError("Databricks is having a bad day")
+        self.output_reads.append(run_id)
+        text = self.run_outputs.get(job_run)
+        return SimpleNamespace(notebook_output=None if text is None else SimpleNamespace(result=text, truncated=False))
 
     def _delete_job(self, job_id):
         if self.fail_delete_job:

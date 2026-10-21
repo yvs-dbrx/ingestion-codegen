@@ -15,6 +15,8 @@ interface AuthContextValue {
   setActiveOrgId: (orgId: string) => void
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, orgName: string) => Promise<void>
+  /** Create an account by accepting an invitation (the invitation decides the email and org). */
+  acceptInvite: (inviteToken: string, password: string) => Promise<void>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -50,7 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await account.me(currentToken)
       setUser(me)
       const chosen = pickActiveOrg(me, localStorage.getItem(ORG_KEY))
-      if (chosen) setActiveOrgId(chosen)
+      if (chosen) {
+        setActiveOrgId(chosen)
+      } else {
+        // No memberships left: don't keep pointing at an organization we no longer belong to.
+        localStorage.removeItem(ORG_KEY)
+        setActiveOrgIdState(null)
+      }
       return me
     },
     [setActiveOrgId],
@@ -101,13 +109,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadUser],
   )
 
+  const acceptInvite = useCallback(
+    async (inviteToken: string, password: string) => {
+      const result = await authApi.acceptInviteNew(inviteToken, password)
+      localStorage.setItem(TOKEN_KEY, result.access_token)
+      localStorage.setItem(ORG_KEY, result.org.id)
+      setToken(result.access_token)
+      await loadUser(result.access_token)
+    },
+    [loadUser],
+  )
+
   const refreshUser = useCallback(async () => {
     if (token) await loadUser(token)
   }, [token, loadUser])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ token, user, activeOrgId, isLoading, setActiveOrgId, login, register, logout, refreshUser }),
-    [token, user, activeOrgId, isLoading, setActiveOrgId, login, register, logout, refreshUser],
+    () => ({
+      token,
+      user,
+      activeOrgId,
+      isLoading,
+      setActiveOrgId,
+      login,
+      register,
+      acceptInvite,
+      logout,
+      refreshUser,
+    }),
+    [token, user, activeOrgId, isLoading, setActiveOrgId, login, register, acceptInvite, logout, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

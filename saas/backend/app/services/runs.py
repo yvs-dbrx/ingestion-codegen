@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Pipeline, PipelineRun
-from app.services import engine
+from app.services import engine, run_metrics
 from app.services.databricks_client import ClientBuilder, client_for_org
 from app.services.errors import BadGateway, Conflict, NotFound
 from app.services.pipelines import ensure_same_workspace
@@ -31,6 +31,7 @@ RECENT_FIRST = (
     PipelineRun.id,
 )
 SYNC_WINDOW = 25  # how many of the job's most recent runs each refresh looks at
+METRICS_PER_REFRESH = 10  # finished runs whose reported counts are fetched per refresh (2 Databricks calls each)
 
 
 def _locked_pipeline(db: Session, org_id: uuid.UUID, pipeline_id: uuid.UUID) -> Pipeline:
@@ -82,6 +83,37 @@ def _sync(db: Session, client, pipeline: Pipeline) -> None:
         row.finished_at = r.finished_at
         row.error_message = r.error_message
         row.databricks_run_url = r.url
+    db.flush()
+    _fetch_metrics(db, client, pipeline)
+
+
+def _fetch_metrics(db: Session, client, pipeline: Pipeline) -> None:
+    """For finished runs we haven't read the counts of yet, ask Databricks what the notebook reported.
+
+    Best effort: if Databricks can't be asked, the run keeps no metrics and is tried again on the next
+    refresh. A run that finished but reported nothing usable (an older notebook) is marked so it is
+    never asked about again. Oldest first, so the registry ends up with the newest run's numbers.
+    """
+    pending = db.scalars(
+        select(PipelineRun)
+        .where(
+            PipelineRun.pipeline_id == pipeline.id,
+            PipelineRun.status == "success",
+            PipelineRun.metrics.is_(None),
+            PipelineRun.databricks_run_id.is_not(None),
+        )
+        .order_by(PipelineRun.finished_at.asc().nulls_last(), PipelineRun.id)
+        .limit(METRICS_PER_REFRESH)
+    ).all()
+    for row in pending:
+        try:
+            reported = engine.run_output(client, row.databricks_run_id)
+        except (engine.EngineRemoteError, engine.EngineInputError):
+            continue
+        cleaned = run_metrics.clean(reported) if reported is not None else None
+        row.metrics = cleaned or {"unavailable": True}
+        if cleaned:
+            run_metrics.apply_to_assets(db, pipeline, cleaned, row.finished_at)
     db.flush()
 
 

@@ -12,6 +12,7 @@ Guarantees this adapter provides on top of the engine:
 """
 import hashlib
 import itertools
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -232,6 +233,21 @@ def generate_notebook(
     return out, text
 
 
+def generate_bronze_notebook(*, tables: list[dict], out_dir: Path) -> tuple[Path, str]:
+    """Renders the Bronze (distinct records) notebook. `tables` is
+    [{"raw", "bronze", "name", "columns": [(name, sql_type), ...]}] — every value already validated."""
+    out = out_dir / "notebook.py"
+    _run(codegen.render_bronze_notebook, tables, str(out))
+    return out, out.read_text(encoding="utf-8")
+
+
+def generate_silver_notebook(*, spec: dict, out_dir: Path) -> tuple[Path, str]:
+    """Renders the Silver notebook from a fully validated spec (see codegen.render_silver_notebook)."""
+    out = out_dir / "notebook.py"
+    _run(codegen.render_silver_notebook, spec, str(out))
+    return out, out.read_text(encoding="utf-8")
+
+
 def notebook_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -286,6 +302,19 @@ def delete_job(client, job_id: int) -> None:
         return
     except Exception as exc:
         raise EngineRemoteError(f"{type(exc).__name__}: {str(exc)[:500]}") from exc
+
+
+def table_columns(client, full_name: str) -> list[dict] | None:
+    """The columns of a Unity Catalog table as [{"name", "type"}], or None if there is no such table."""
+    from databricks.sdk.errors import NotFound
+
+    try:
+        info = client.tables.get(full_name=full_name)
+    except NotFound:
+        return None
+    except Exception as exc:
+        raise EngineRemoteError(f"{type(exc).__name__}: {str(exc)[:500]}") from exc
+    return [{"name": str(c.name), "type": str(c.type_text or "")} for c in (info.columns or [])]
 
 
 def verify_connection(client) -> None:
@@ -365,3 +394,33 @@ def list_runs(client, job_id: int, limit: int = 25) -> list[RemoteRun]:
         return out
 
     return _run(fetch)
+
+
+MAX_OUTPUT_CHARS = 200_000
+
+
+def run_output(client, run_id: int) -> dict | None:
+    """What the run's notebook handed back through dbutils.notebook.exit(), parsed as JSON.
+
+    Returns None when the run finished but reported nothing usable (an older notebook, or output that
+    isn't JSON) — a definitive answer that won't change. Raises EngineRemoteError when Databricks
+    couldn't be asked, which may well work next time.
+
+    A job with one task is read through that task's own run id, so look it up first.
+    """
+
+    def fetch():
+        run = client.jobs.get_run(run_id=run_id)
+        tasks = list(getattr(run, "tasks", None) or [])
+        out = client.jobs.get_run_output(run_id=tasks[0].run_id if tasks else run_id)
+        notebook_output = getattr(out, "notebook_output", None)
+        return getattr(notebook_output, "result", None)
+
+    raw = _run(fetch)
+    if not raw or len(raw) > MAX_OUTPUT_CHARS:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None

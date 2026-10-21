@@ -1,0 +1,323 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ## Auto-generated Silver notebook — integrated, conformed entities
+# MAGIC Builds clean, typed tables from the Bronze table below. Each Silver table holds **one current row per
+# MAGIC business key**.
+# MAGIC
+# MAGIC - **Source:** `{{ spec.source.bronze }}` (system `{{ spec.source.system }}`)
+# MAGIC - **Current version:** of the versions of a key's record, the one *seen most recently* wins (from the
+# MAGIC   Bronze sightings table), so a value that changes and later changes back is handled correctly.
+# MAGIC - **Transforms:** only the fixed steps listed in the configuration below (trim, upper, lower, null_if,
+# MAGIC   cast, parse_date, parse_timestamp, default). Nothing else runs.
+# MAGIC - **Quality:** a record whose current version can't be converted, or is missing a required value or its
+# MAGIC   key, goes to the entity's `_quarantine` table. Silver keeps the last good row for that key.
+# MAGIC - **Master keys:** looked up in the crosswalk table. A key with no mapping gets the unknown member
+# MAGIC   `{{ spec.unknown_master_key }}` and is flagged `_master_key_resolved = false`; it is picked up
+# MAGIC   automatically on the first run after the crosswalk gains it.
+# MAGIC - **Not inserted blindly:** existing rows are only changed when a value actually differs.
+# MAGIC
+# MAGIC | Silver table | Business key | Master key |
+# MAGIC |---|---|---|
+# MAGIC {% for e in spec.entities %}| `{{ e.target }}` | {{ e.business_key | join(', ') }} | {% if e.master_key %}`{{ e.master_key.column }}` from `{{ e.master_key.crosswalk }}`{% if e.master_key.entity_type_column is defined %} (entity type `{{ e.master_key.entity_type }}`){% endif %}{% else %}—{% endif %} |
+# MAGIC {% endfor %}
+
+# COMMAND ----------
+
+import json
+
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+
+# COMMAND ----------
+
+# Everything below is DATA that was validated and reviewed when this notebook was generated.
+SPEC = json.loads({{ spec_json | tojson }})
+
+LINEAGE = {"_record_hash", "_ingested_at", "_source_file", "_batch_id"}  # Bronze's own columns
+STEP_KINDS = {"trim", "upper", "lower", "null_if", "cast", "parse_date", "parse_timestamp", "default"}
+
+# COMMAND ----------
+
+
+def quote(name):
+    return "`" + name.replace("`", "") + "`"
+
+
+def literal(value):
+    """A text constant for SQL. Values were restricted to a plain character set when validated; the
+    quoting here is a second, independent safeguard."""
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def apply_steps(expr, steps):
+    """One attribute's steps as a SQL expression, plus the conditions under which a conversion failed
+    (a value was present but a cast / parse step produced NULL). try_* functions never raise, whatever
+    the session's ANSI setting is."""
+    failures = []
+    for step in steps:
+        kind = step["kind"]
+        if kind not in STEP_KINDS:
+            raise ValueError(f"unknown transform step: {kind!r}")
+        before = expr
+        if kind == "trim":
+            expr = f"trim(CAST({before} AS STRING))"
+        elif kind == "upper":
+            expr = f"upper(CAST({before} AS STRING))"
+        elif kind == "lower":
+            expr = f"lower(CAST({before} AS STRING))"
+        elif kind == "null_if":
+            values = ", ".join(literal(v) for v in step["values"])
+            expr = f"CASE WHEN trim(CAST({before} AS STRING)) IN ({values}) THEN NULL ELSE {before} END"
+        elif kind == "default":
+            expr = f"coalesce({before}, try_cast({literal(step['value'])} AS {step['type']}))"
+        elif kind == "cast":
+            expr = f"try_cast({before} AS {step['type']})"
+        elif kind == "parse_date":
+            expr = f"CAST(try_to_timestamp(CAST({before} AS STRING), {literal(step['format'])}) AS DATE)"
+        elif kind == "parse_timestamp":
+            expr = f"try_to_timestamp(CAST({before} AS STRING), {literal(step['format'])})"
+        if kind in ("cast", "parse_date", "parse_timestamp"):
+            failures.append(f"({before} IS NOT NULL AND {expr} IS NULL)")
+    return expr, failures
+
+
+def null_safe_equal(left, right):
+    return f"{left} <=> {right}"
+
+
+# COMMAND ----------
+
+SOURCE = SPEC["source"]
+SYSTEM = SOURCE["system"]
+UNKNOWN = SPEC["unknown_master_key"]
+
+bronze = spark.table(SOURCE["bronze"])
+sightings = spark.table(SOURCE["sightings"])
+
+# When was each distinct record last seen, and in which load? (Bronze keeps a record once; the
+# sightings say every load it appeared in.)
+last_seen = sightings.groupBy("_record_hash").agg(
+    F.max(F.struct(F.col("_ingested_at").alias("at"), F.col("_batch_id").alias("batch"))).alias("_ls")
+)
+records = (
+    bronze.join(last_seen, "_record_hash", "left")
+    .withColumn("_seen_at", F.coalesce(F.col("_ls.at"), F.col("_ingested_at")))
+    .withColumn("_seen_batch", F.coalesce(F.col("_ls.batch"), F.col("_batch_id")))
+    .drop("_ls")
+)
+records_read = bronze.count()
+
+missing_source = [c for e in SPEC["entities"] for a in e["attributes"] for c in [a["from"]] if c not in bronze.columns]
+if missing_source:
+    raise ValueError(
+        f"{SOURCE['bronze']} no longer has column(s) this notebook reads: {sorted(set(missing_source))}. "
+        "Regenerate this pipeline from the table's current schema."
+    )
+
+now = F.current_timestamp()
+results = {}
+
+# COMMAND ----------
+
+for entity in SPEC["entities"]:
+    target = entity["target"]
+    quarantine_table = entity["quarantine"]
+    keys = entity["business_key"]
+    attr_names = [a["name"] for a in entity["attributes"]]
+
+    # --- 1. typed, cleaned attributes, and why a record would be rejected -------------------------
+    selected, failure_flags, reasons = [], [], []
+    for a in entity["attributes"]:
+        expr, failures = apply_steps(quote(a["from"]), a["steps"])
+        selected.append(F.expr(f"try_cast({expr} AS {a['type']})").alias(a["name"]))
+        if failures:
+            flag = "_failed_" + a["name"]
+            failure_flags.append(flag)
+            selected.append(F.expr(" OR ".join(failures)).alias(flag))
+            reasons.append(F.when(F.col(flag), F.lit(f"{a['name']}: value could not be converted")))
+        if a["required"] or a["name"] in keys:
+            reasons.append(F.when(F.col(quote(a["name"])).isNull(), F.lit(f"{a['name']}: required value is empty")))
+
+    typed = records.select(
+        *selected,
+        F.col("_record_hash"),
+        F.col("_seen_at"),
+        F.col("_seen_batch"),
+        F.to_json(F.struct(*[F.col(quote(c)) for c in bronze.columns if c not in LINEAGE])).alias("_record"),
+    )
+    typed = typed.withColumn("_reasons", F.filter(F.array(*reasons), lambda r: r.isNotNull()) if reasons else F.array().cast("array<string>"))
+    typed = typed.withColumn(
+        "_value_hash", F.sha2(F.to_json(F.struct(*[F.col(quote(n)) for n in attr_names])), 256)
+    ).drop(*failure_flags)
+
+    # --- 2. records that can't be placed at all (no usable key) go straight to quarantine -----------
+    key_missing = F.lit(False)
+    for k in keys:
+        key_missing = key_missing | F.col(quote(k)).isNull()
+    keyless = typed.filter(key_missing)
+    keyed = typed.filter(~key_missing)
+
+    # --- 3. the current version of each key: seen most recently, a fixed tie-break after that ------
+    per_key = Window.partitionBy(*[quote(k) for k in keys])
+    seen_rank = F.struct(F.col("_seen_at"), F.col("_seen_batch"))
+    latest_seen = keyed.withColumn("_top", F.max(seen_rank).over(per_key)).filter(seen_rank == F.col("_top")).drop("_top")
+    conflicting_keys = (
+        latest_seen.groupBy(*[quote(k) for k in keys])
+        .agg(F.countDistinct("_value_hash").alias("_n"))
+        .filter("_n > 1")
+        .count()
+    )
+    pick = Window.partitionBy(*[quote(k) for k in keys]).orderBy(F.col("_value_hash"))
+    latest = latest_seen.withColumn("_rn", F.row_number().over(pick)).filter("_rn = 1").drop("_rn")
+
+    distinct_keys = latest.count()
+    invalid = latest.filter(F.size("_reasons") > 0)
+    valid = latest.filter(F.size("_reasons") == 0)
+    quarantined_keys = invalid.count()
+    valid_keys = distinct_keys - quarantined_keys
+    keyless_records = keyless.count()
+
+    # --- 4. quarantine (insert-only; the same record is never added twice) -------------------------
+    spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {quarantine_table} (
+        _record_hash STRING,
+        _reasons STRING,
+        _record STRING,
+        _quarantined_at TIMESTAMP
+    )
+    USING DELTA
+    """)
+    to_quarantine = (
+        keyless.select("_record_hash", "_reasons", "_record")
+        .unionByName(invalid.select("_record_hash", "_reasons", "_record"))
+        .withColumn("_reasons", F.to_json(F.col("_reasons")))
+        .withColumn("_quarantined_at", now)
+        .dropDuplicates(["_record_hash"])
+    )
+    to_quarantine.createOrReplaceTempView("_refinaire_quarantine_incoming")
+    spark.sql(f"""
+        MERGE INTO {quarantine_table} AS tgt
+        USING _refinaire_quarantine_incoming AS src
+        ON tgt._record_hash = src._record_hash
+        WHEN NOT MATCHED THEN INSERT *
+    """)
+
+    # --- 5. master key lookup ---------------------------------------------------------------------
+    master = entity["master_key"]
+    crosswalk_rows = crosswalk_version = None
+    unmapped_keys = 0
+    if master:
+        cw = spark.table(master["crosswalk"])
+        if master.get("entity_type_column"):
+            # One crosswalk can hold several kinds of thing (customer, product, ...) whose source keys
+            # overlap; only the rows for this table's kind are used.
+            cw = cw.where(F.col(quote(master["entity_type_column"])).cast("string") == master["entity_type"])
+        cw = cw.select(
+            F.col(quote(master["system_column"])).cast("string").alias("_cw_system"),
+            F.col(quote(master["key_column"])).cast("string").alias("_cw_key"),
+            F.col(quote(master["master_column"])).cast("string").alias("_cw_master"),
+        ).where(F.col("_cw_system") == SYSTEM).where("_cw_key IS NOT NULL AND _cw_master IS NOT NULL")
+        cw = cw.dropDuplicates(["_cw_key", "_cw_master"])  # an identical repeated mapping is harmless
+        # One source key must not map to two master keys: that would silently multiply (or pick between)
+        # rows. Stop and say so rather than guess.
+        ambiguous = cw.groupBy("_cw_key").agg(F.countDistinct("_cw_master").alias("_n")).filter("_n > 1")
+        n_ambiguous = ambiguous.count()
+        if n_ambiguous:
+            sample = [r["_cw_key"] for r in ambiguous.limit(5).collect()]
+            raise ValueError(
+                f"{master['crosswalk']} maps {n_ambiguous} source key(s) of system {SYSTEM!r} to more than one "
+                f"master key (for example {sample}). Fix the crosswalk, then run again."
+            )
+        crosswalk_rows = cw.count()
+        try:
+            crosswalk_version = spark.sql(f"DESCRIBE HISTORY {master['crosswalk']} LIMIT 1").first()["version"]
+        except Exception:  # a view, or a table type without history
+            crosswalk_version = None
+        valid = (
+            valid.join(cw, F.col(quote(keys[0])).cast("string") == F.col("_cw_key"), "left")
+            .withColumn(master["column"], F.coalesce(F.col("_cw_master"), F.lit(UNKNOWN)))
+            .withColumn("_master_key_resolved", F.col("_cw_master").isNotNull())
+            .drop("_cw_system", "_cw_key", "_cw_master")
+        )
+        unmapped_keys = valid.filter(~F.col("_master_key_resolved")).count()
+
+    # --- 6. write: insert new keys, update a key only when a value changed -------------------------
+    data_columns = [(a["name"], a["type"]) for a in entity["attributes"]]
+    if master:
+        data_columns += [(master["column"], "STRING"), ("_master_key_resolved", "BOOLEAN")]
+    column_ddl = ",\n        ".join(f"{quote(n)} {t}" for n, t in data_columns)
+    spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {target} (
+        {column_ddl},
+        _source_system STRING,
+        _record_hash STRING,
+        _updated_at TIMESTAMP
+    )
+    USING DELTA
+    """)
+    out_cols = [quote(n) for n, _ in data_columns]
+    valid.select(
+        *[F.col(c) for c in out_cols],
+        F.lit(SYSTEM).alias("_source_system"),
+        F.col("_record_hash"),
+        now.alias("_updated_at"),
+    ).createOrReplaceTempView("_refinaire_silver_incoming")
+
+    on_clause = " AND ".join(null_safe_equal(f"tgt.{quote(k)}", f"src.{quote(k)}") for k in keys)
+    value_columns = [quote(n) for n, _ in data_columns if n not in keys]
+    changed = " OR ".join(f"NOT ({null_safe_equal('tgt.' + c, 'src.' + c)})" for c in value_columns) or "FALSE"
+
+    rows_before = spark.table(target).count()
+    merge_result = spark.sql(f"""
+        MERGE INTO {target} AS tgt
+        USING _refinaire_silver_incoming AS src
+        ON {on_clause}
+        WHEN MATCHED AND ({changed}) THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+    """).first()
+    rows_after = spark.table(target).count()
+
+    merge = merge_result.asDict() if merge_result is not None else {}
+    inserted = rows_after - rows_before
+    updated = merge.get("num_updated_rows")
+    if updated is None:
+        updated = 0
+    unchanged = valid_keys - inserted - updated
+    reconciled = inserted >= 0 and updated >= 0 and unchanged >= 0 and merge.get("num_inserted_rows", inserted) == inserted
+
+    results[entity["name"]] = {
+        "source": SOURCE["bronze"],
+        "target": target,
+        "rows_read": records_read,
+        "null_key_records": keyless_records,
+        "distinct_keys": distinct_keys,
+        "conflicting_keys": conflicting_keys,
+        "quarantined_keys": quarantined_keys,
+        "rows_inserted": inserted,
+        "rows_updated": updated,
+        "unchanged": unchanged,
+        "rows_in_target": rows_after,
+        "unmapped_keys": unmapped_keys,
+        "reconciled": reconciled,
+    }
+    if master:
+        results[entity["name"]]["crosswalk_rows"] = crosswalk_rows
+        if crosswalk_version is not None:
+            results[entity["name"]]["crosswalk_version"] = crosswalk_version
+    print(
+        f"{target}: {distinct_keys} keys ({inserted} new, {updated} updated, {unchanged} unchanged), "
+        f"{quarantined_keys} quarantined, {keyless_records} without a key"
+        + (f", {unmapped_keys} without a master key" if master else "")
+        + (f", {conflicting_keys} keys with conflicting values in their latest load" if conflicting_keys else "")
+        + ("" if reconciled else "  [COUNTS DO NOT RECONCILE]")
+    )
+
+# COMMAND ----------
+
+dbutils.notebook.exit(json.dumps({
+    "v": 1,
+    "layer": "silver",
+    "mode": "full",
+    "reconciled": all(r["reconciled"] for r in results.values()),
+    "tables": results,
+}))

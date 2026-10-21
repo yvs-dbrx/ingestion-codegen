@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { account } from '../lib/endpoints'
 import { useAuth } from '../lib/auth'
 
@@ -55,30 +56,54 @@ export function DashboardPage() {
         <PlaceholderCard
           title="Sources & discovery"
           description="Browse the source registry and discover new schemas from your Databricks workspace."
+          to="/sources"
         />
         <PlaceholderCard
           title="Pipelines"
-          description="Build, preview and deploy ingestion pipelines."
+          description="Build, preview and deploy ingestion pipelines, and see how they've been running."
+          to="/pipelines"
+        />
+        <PlaceholderCard
+          title="Tables"
+          description="Every table your pipelines produce, by layer, and where it came from."
+          to="/tables"
         />
         <PlaceholderCard
           title="Runs"
-          description="See run history and trigger a pipeline manually."
+          description="Recent runs across every pipeline, filterable by status."
+          to="/runs"
         />
         <PlaceholderCard
-          title="Team & connection"
-          description="Manage members, invites, and your Databricks workspace connection."
+          title="Team"
+          description="Invite people, and see who's in your organization."
+          to="/team"
+        />
+        <PlaceholderCard
+          title="Databricks connection"
+          description="See, replace or disconnect the workspace this organization deploys to."
+          to="/connection"
         />
       </div>
     </div>
   )
 }
 
-function PlaceholderCard({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-border bg-surface p-5">
+function PlaceholderCard({ title, description, to }: { title: string; description: string; to?: string }) {
+  const body = (
+    <>
       <h2 className="font-medium text-text">{title}</h2>
       <p className="mt-1 text-sm text-text-muted">{description}</p>
-      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-accent">Coming next</p>
-    </div>
+      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-accent">
+        {to ? 'Open →' : 'Coming next'}
+      </p>
+    </>
   )
+  if (to) {
+    return (
+      <Link to={to} className="rounded-lg border border-border bg-surface p-5 hover:border-accent">
+        {body}
+      </Link>
+    )
+  }
+  return <div className="rounded-lg border border-dashed border-border bg-surface p-5">{body}</div>
 }

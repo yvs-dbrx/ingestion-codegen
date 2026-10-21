@@ -1,0 +1,26 @@
+PROD_ID,PROD_NAME,PROD_DESCRIPTION,PROD_CATEGORY_PROD_CAT_CODE,PROD_CATEGORY_PROD_CAT_DESC,PROD_SUBCATEGORY_PROD_SUBCAT_CODE,PROD_SUBCATEGORY_PROD_SUBCAT_DESC,PROD_PRICING_PROD_UNIT_PRICE,PROD_PRICING_PROD_UNIT_COST,PROD_PRICING_PROD_TAX_RATE,PROD_INVENTORY_PROD_QTY_ON_HAND,PROD_INVENTORY_PROD_REORDER_LVL,PROD_INVENTORY_PROD_WEIGHT_KG,PROD_UOM,PROD_STATUS,PROD_DATE_ADDED,PROD_DATE_MODIFIED
+10000001,Smartphone X12 128GB,"6.1 inch OLED display, dual camera, 5G unlocked",ELEC,Electronics,MOBI,Mobile Devices,799.00,520.00,0.0825,1584,304,0.174,EACH,A,20240301,20260818
+10000002,Wireless Earbuds Pro,"Active noise cancelling, 24 hour battery case",ELEC,Electronics,MOBI,Mobile Devices,159.00,74.50,0.0825,3879,59,0.056,EACH,A,20220919,20231117
+10000003,UltraBook 14 Laptop,"14 inch, 16GB memory, 512GB solid state drive",ELEC,Electronics,LAPT,Laptops & Computers,1299.00,910.00,0.0825,1941,440,1.320,EACH,A,20190821,20210413
+10000004,Gaming Laptop 16,"16 inch, discrete graphics, 165Hz display",ELEC,Electronics,LAPT,Laptops & Computers,1899.00,1380.00,0.0825,0,123,2.450,EACH,D,20191112,20211117
+10000005,55in 4K Smart TV,"55 inch 4K HDR, built in streaming apps",ELEC,Electronics,TVHF,TV & Home Theater,549.99,380.00,0.0825,4554,63,13.800,EACH,A,20250623,20260305
+10000006,Soundbar 2.1 Channel,"Wireless subwoofer, HDMI ARC, Bluetooth",ELEC,Electronics,TVHF,TV & Home Theater,179.99,105.00,0.0825,1645,241,3.600,EACH,A,20200626,20211109
+10000007,Mens Classic Oxford Shirt,"100 percent cotton, button down collar",CLTH,Clothing & Apparel,MENSW,Men's Clothing,49.50,21.00,0.0625,382,81,0.280,EACH,A,20201003,20220822
+10000008,Mens Slim Fit Chinos,"Stretch cotton twill, five pocket styling",CLTH,Clothing & Apparel,MENSW,Men's Clothing,64.00,28.00,0.0625,1477,309,0.520,EACH,A,20210721,20230405
+10000009,Womens Wool Blend Coat,"Double breasted, fully lined, knee length",CLTH,Clothing & Apparel,WMNSW,Women's Clothing,189.00,82.00,0.0625,3251,223,1.150,EACH,A,20220909,20241022
+10000010,Womens Running Shoes,"Lightweight mesh upper, cushioned midsole",CLTH,Clothing & Apparel,WMNSW,Women's Clothing,94.95,41.00,0.0625,-12,420,0.620,PAIR,A,20221105,20240702
+10000011,Kids Rain Jacket,"Waterproof shell with hood, reflective trim",CLTH,Clothing & Apparel,KIDSC,Kids' Clothing,39.99,16.50,0.0625,3890,253,0.340,EACH,A,20250430,20260715
+10000012,Kids Backpack 20L,"Padded straps, water bottle pocket",CLTH,Clothing & Apparel,KIDSC,Kids' Clothing,29.95,12.00,0.0625,3240,134,0.480,EACH,A,20240305,20260324
+10000013,Oak Dining Table 6 Seat,"Solid oak, extends to eight seats",HOME,Home & Garden,FRNTR,Furniture,899.00,510.00,0.0825,84,439,42.000,EACH,A,20220621,20221119
+10000014,Ergonomic Office Chair,"Mesh back, adjustable lumbar and arms",HOME,Home & Garden,FRNTR,Furniture,349.00,180.00,0.0825,1928,62,16.500,EACH,A,20230926,20250603
+10000015,Stainless Cookware Set,"10 piece, induction compatible, oven safe",HOME,Home & Garden,KITCH,Kitchen & Dining,249.00,121.00,0.0825,3669,352,9.800,SET,A,20190722,20191001
+10000016,Programmable Coffee Maker,"12 cup, thermal carafe, brew timer",HOME,Home & Garden,KITCH,Kitchen & Dining,89.99,42.00,0.0825,4466,241,2.700,EACH,A,20240430,20240921
+10000017,Cordless Leaf Blower,"40V battery included, variable speed",HOME,Home & Garden,GRDNR,Garden & Outdoor,159.00,78.00,0.0825,207,228,2.900,EACH,S,20241219,20270211
+10000018,Patio Umbrella 9ft,"Tilt mechanism, UV resistant canopy",HOME,Home & Garden,GRDNR,Garden & Outdoor,119.00,57.00,0.0825,3446,114,6.400,EACH,S,20190429,20200516
+10000019,Organic Granola 12oz,"Honey almond, no added preservatives",FOOD,Food & Grocery,BKFST,Breakfast & Cereal,6.49,3.10,0.0000,1896,29,0.340,EACH,A,20210401,20230319
+10000020,Steel Cut Oats 24oz,"Whole grain, quick cooking",FOOD,Food & Grocery,BKFST,Breakfast & Cereal,5.29,2.40,0.0000,582,161,0.680,EACH,A,20240530,20260610
+10000021,Sea Salt Kettle Chips 8oz,"Kettle cooked, gluten free",FOOD,Food & Grocery,SNACK,Snacks & Chips,3.99,1.70,0.0000,1780,160,0.227,EACH,A,20190624,20191129
+10000022,Mixed Nut Trail Mix 16oz,"Roasted nuts, dried fruit, dark chocolate",FOOD,Food & Grocery,SNACK,Snacks & Chips,8.99,4.60,0.0000,3775,383,0.454,EACH,A,20240826,20250122
+10000023,Cold Brew Coffee 32oz,"Ready to drink, smooth and low acid",FOOD,Food & Grocery,BEVER,Beverages,7.49,3.30,0.0000,2952,216,0.950,EACH,A,20250325,20270621
+10000024,Sparkling Water 12 Pack,"Lime flavor, zero calories",FOOD,Food & Grocery,BEVER,Beverages,5.99,2.50,0.0000,726,363,4.300,CASE,A,20200829,20220304
+10000025,Family Cereal Variety Box,Assorted single serve cups,FOOD,Food & Grocery,BKFST,Breakfast & Cereal,11.99,5.60,0.0000,71,375,1.100,BOX,A,20250217,20260522

@@ -71,9 +71,9 @@ def get_client_builder() -> ClientBuilder:
 def client_for_org(db: Session, org_id: uuid.UUID, builder: ClientBuilder):
     connection = db.scalar(select(OrgConnection).where(OrgConnection.org_id == org_id))
     if connection is None:
-        raise NoConnection("Connect your Databricks workspace first (PUT /org/connection)")
+        raise NoConnection("Connect your Databricks workspace first (Connection page)")
     try:
         token = secrets.decrypt(connection.token_ciphertext)
     except secrets.CannotDecrypt:
-        raise NoConnection("The stored Databricks credentials can't be read any more — reconnect the workspace (PUT /org/connection)")
+        raise NoConnection("The stored Databricks credentials can't be read any more — reconnect the workspace (Connection page)")
     return builder(connection.host, token)

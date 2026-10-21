@@ -1,4 +1,4 @@
-# Ingestion codegen prototype (CSV → Databricks Bronze)
+# Ingestion codegen prototype (CSV → Databricks Raw layer)
 
 This is Phase 1 from the PRD, stripped to just the core engine: no UI, no
 auth, no deploy automation. It proves the metadata-driven codegen idea
@@ -10,7 +10,7 @@ works before any of the SaaS shell gets built around it.
 2. Shows you that schema and asks you to confirm it (the same review
    checkpoint the full product will have in its UI).
 3. Generates a real Databricks notebook (`.py` source format) that
-   creates the Bronze table and ingests the file into it.
+   creates the Raw table and ingests the file into it.
 
 ## What it does NOT do (yet — by design)
 
@@ -64,7 +64,7 @@ import it directly:
    storage), then edit the `source_path` widget default at the top of the
    notebook to that Databricks-accessible path before running.
 3. Attach the notebook to a running cluster and run all cells.
-4. Confirm the Bronze table got created and populated:
+4. Confirm the Raw table got created and populated:
    ```sql
    SELECT * FROM <your_catalog>.bronze.customers;
    ```
@@ -78,7 +78,7 @@ import it directly:
   current CSV inferrer doesn't attempt date parsing yet, which is a fair
   thing to tighten in the next iteration if it matters to you).
 - The generated notebook ran without edits beyond the source path.
-- The Bronze table exists with the right structure and the right row
+- The Raw table exists with the right structure and the right row
   count.
 
 If any of that breaks, that's useful — it tells us exactly which part of
@@ -140,7 +140,7 @@ to find out if it worked — check the printed job URL for status.
 ### What "success" looks like for this test
 
 - The job appears in your workspace's **Workflows** tab.
-- The triggered run (from `--run-now`) succeeds, and the Bronze table
+- The triggered run (from `--run-now`) succeeds, and the Raw table
   gets the expected row count.
 - Re-running `deploy_cli.py` with the same `--job-name` **updates** the
   existing job instead of creating a duplicate — worth testing
